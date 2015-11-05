@@ -1,0 +1,90 @@
+buildscript {
+    repositories {
+        maven {
+            url "http://dl.bintray.com/jmoore/java-lib"
+        }
+    }
+    dependencies {
+        classpath 'com.mooregreatsoftware:gradle-defaults:1.0.3'
+    }
+}
+
+plugins {
+    id 'com.jfrog.bintray' version '1.2'
+}
+
+group = 'com.twcable.gradle'
+description = 'Gradle plugin for working with the Eclipse Bundlor tool'
+
+apply plugin: 'groovy'
+
+apply plugin: 'java-gradle-plugin'
+
+def httpcomponents_version = '4.1.2'
+
+repositories {
+    maven {
+        url "http://dl.bintray.com/twcable/aem"
+    }
+    maven {
+        url "https://oss.sonatype.org/content/repositories/snapshots"
+    }
+}
+
+dependencies {
+    compile "com.twcable.gradle:gradle-plugin-cq-bundle:1.0.0"
+
+    // JCR file vault packaging
+    compile "org.apache.jackrabbit.vault:org.apache.jackrabbit.vault:3.1.18"
+    compile "org.apache.sling:org.apache.sling.jcr.jcr-wrapper:2.0.0"
+    compile "org.apache.jackrabbit:jackrabbit-spi-commons:2.10.0"
+
+    // @Nonnull @Nullable etc annotations
+    compile "com.google.code.findbugs:jsr305:2.0.0"
+
+    testCompile "cglib:cglib-nodep:2.2"
+    testCompile "org.xmlunit:xmlunit-core:2.0.0-SNAPSHOT"
+    testCompile "org.xmlunit:xmlunit-matchers:2.0.0-SNAPSHOT"
+
+    testCompile "org.spockframework:spock-core:1.0-groovy-2.4", {
+        exclude group: 'org.codehaus.groovy', module: 'groovy-all'
+        exclude group: 'org.hamcrest', module: 'hamcrest-core'
+    }
+}
+
+bintray {
+    pkg {
+        issueTrackerUrl = 'https://github.com/TWCable/gradle-plugin-bundlor/issues'
+        licenses = ['Apache-2.0']
+        attributes = ['plat': ['gradle', 'osgi']]
+
+        //noinspection GroovyAssignabilityCheck
+        version {
+            attributes = ['gradle-plugin': ["com.twcable.gradle-plugin:${project.group}:${project.name}"]]
+        }
+    }
+}
+
+apply plugin: 'com.mooregreatsoftware.defaults'
+
+defaults {
+    compatibilityVersion = '1.7'
+
+    id = 'twcable'
+
+    orgName = 'Time Warner Cable'
+    orgUrl = 'http://www.timewarnercable.com'
+
+    bintrayRepo = 'aem'
+    bintrayLabels = ['gradle', 'groovy', 'osgi']
+
+    developers = [
+        [id: 'jmoore', name: 'Jim Moore', email: 'moore.jim@gmail.com'],
+    ]
+
+    copyrightYears = '2014-2015'
+}
+
+wrapper {
+    gradleVersion = 2.8
+}
