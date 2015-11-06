@@ -10,26 +10,28 @@ buildscript {
 }
 
 plugins {
-    id 'com.jfrog.bintray' version '1.2'
+    id 'com.jfrog.bintray' version '1.4'
 }
 
 group = 'com.twcable.gradle'
-description = 'Gradle plugin for working with the Eclipse Bundlor tool'
+description = 'Gradle plugin for working with Adobe CQ/AEM content packages'
 
 apply plugin: 'groovy'
 
 apply plugin: 'java-gradle-plugin'
 
-def httpcomponents_version = '4.1.2'
-
 repositories {
     maven {
         url "http://dl.bintray.com/twcable/aem"
     }
+
+    // needed for the xmlunit SNAPSHOTS
     maven {
         url "https://oss.sonatype.org/content/repositories/snapshots"
     }
 }
+
+def httpcomponents_version = '4.1.2'
 
 dependencies {
     compile "com.twcable.gradle:gradle-plugin-cq-bundle:1.0.0"
@@ -54,9 +56,8 @@ dependencies {
 
 bintray {
     pkg {
-        issueTrackerUrl = 'https://github.com/TWCable/gradle-plugin-bundlor/issues'
         licenses = ['Apache-2.0']
-        attributes = ['plat': ['gradle', 'osgi']]
+        attributes = ['plat': ['gradle', 'aem', 'osgi', 'sling', 'cq']]
 
         //noinspection GroovyAssignabilityCheck
         version {
