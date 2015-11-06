@@ -46,6 +46,8 @@ dependencies {
     // @Nonnull @Nullable etc annotations
     compile "com.google.code.findbugs:jsr305:2.0.0"
 
+    runtime "commons-io:commons-io:2.4"
+
     testCompile "cglib:cglib-nodep:2.2"
     testCompile "org.xmlunit:xmlunit-core:2.0.0-SNAPSHOT"
     testCompile "org.xmlunit:xmlunit-matchers:2.0.0-SNAPSHOT"
