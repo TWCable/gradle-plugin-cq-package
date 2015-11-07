@@ -18,7 +18,6 @@ package com.twcable.gradle.cqpackage
 import org.apache.jackrabbit.vault.packaging.impl.PackageManagerImpl
 import spock.lang.Unroll
 
-import static com.twcable.gradle.cqpackage.PackageStatus.NO_PACKAGE
 import static com.twcable.gradle.cqpackage.PackageStatus.OK
 
 @SuppressWarnings("GroovyAssignabilityCheck")
@@ -38,7 +37,6 @@ class UploadPackageSpec extends AbstractPackageCommandSpec {
         where:
         installedPackage | success | msg                 | status
         "testpackage"    | true    | "Package installed" | OK
-//        "froble"         | null    | "no package"        | NO_PACKAGE
     }
 
 }

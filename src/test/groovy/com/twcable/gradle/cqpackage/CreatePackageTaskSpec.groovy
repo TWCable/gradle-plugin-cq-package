@@ -15,8 +15,8 @@
  */
 package com.twcable.gradle.cqpackage
 
-import org.gradle.api.Project
-import spock.lang.Specification
+import nebula.test.ProjectSpec
+import org.gradle.api.logging.LogLevel
 import spock.lang.Subject
 import spock.lang.Unroll
 
@@ -30,13 +30,18 @@ import static com.twcable.gradle.cqpackage.CqPackageTestUtils.createSubProject
 import static com.twcable.gradle.cqpackage.CqPackageTestUtils.touch
 
 @Subject(CreatePackageTask)
-class CreatePackageTaskSpec extends Specification {
-
-    Project project
-
+class CreatePackageTaskSpec extends ProjectSpec {
 
     def setup() {
-        project = CqPackageTestUtils.createCqPackageProject()
+        project.logging.level = LogLevel.DEBUG
+        project.version = "2.3.4"
+        project.apply plugin: CqPackagePlugin
+        project.apply plugin: 'java'
+
+        project.tasks.withType(CreatePackageTask) { CreatePackageTask task ->
+            task.bundleInstallRoot = "/apps/install"
+        }
+
         project.verifyBundles.enabled = false
 
         def subproject1 = createSubProject(project, 'subproject1', true)
@@ -63,7 +68,7 @@ class CreatePackageTaskSpec extends Specification {
         createPackage.addAllBundles()
 
         when:
-        com.twcable.gradle.GradleUtils.execute(createPackage)
+        execute(createPackage)
         def filenames = filesInJar(createPackage)
 
         then:
@@ -76,7 +81,7 @@ class CreatePackageTaskSpec extends Specification {
         def createPackage = project.createPackage as CreatePackageTask
 
         when:
-        com.twcable.gradle.GradleUtils.execute(createPackage)
+        execute(createPackage)
         def filenames = filesInJar(createPackage)
 
         then:
@@ -90,7 +95,7 @@ class CreatePackageTaskSpec extends Specification {
         createPackage.addProjectBundles()
 
         when:
-        com.twcable.gradle.GradleUtils.execute(createPackage)
+        execute(createPackage)
         def filenames = filesInJar(createPackage)
 
         then:
@@ -104,7 +109,7 @@ class CreatePackageTaskSpec extends Specification {
         createPackage.addNonProjectBundles()
 
         when:
-        com.twcable.gradle.GradleUtils.execute(createPackage)
+        execute(createPackage)
         def filenames = filesInJar(createPackage)
 
         then:
@@ -118,7 +123,7 @@ class CreatePackageTaskSpec extends Specification {
         createPackage.addNoBundles()
 
         when:
-        com.twcable.gradle.GradleUtils.execute(createPackage)
+        execute(createPackage)
         def filenames = filesInJar(createPackage)
 
         then:
@@ -135,7 +140,7 @@ class CreatePackageTaskSpec extends Specification {
         touch(new File(contentDir, "jcr_root/.vlt-sync-config.properties"))
 
         when:
-        com.twcable.gradle.GradleUtils.execute(createPackage)
+        execute(createPackage)
         def filenames = filesInJar(createPackage)
 
         then:

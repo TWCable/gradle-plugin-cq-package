@@ -41,7 +41,9 @@ final class CqPackageTestUtils {
         project.apply plugin: 'com.twcable.cq-package'
         project.apply plugin: 'java'
 
-        project.tasks.withType(CreatePackageTask).first().bundleInstallRoot = bundleRoot
+        project.tasks.withType(CreatePackageTask) { CreatePackageTask task ->
+            task.bundleInstallRoot = bundleRoot
+        }
 
         return project
     }

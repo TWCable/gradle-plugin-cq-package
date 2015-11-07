@@ -16,22 +16,28 @@
 package com.twcable.gradle.cqpackage
 
 import com.twcable.gradle.sling.SlingServersConfiguration
+import nebula.test.PluginProjectSpec
 import org.gradle.api.Project
 import org.gradle.api.Task
+import org.gradle.api.logging.LogLevel
 import org.gradle.testfixtures.ProjectBuilder
-import spock.lang.Specification
 import spock.lang.Unroll
 
 import static com.twcable.gradle.cqpackage.CqPackageTestUtils.addProjectToCompile
 import static com.twcable.gradle.cqpackage.CqPackageTestUtils.createSubProject
 
-class CqPackagePluginSpec extends Specification {
-
-    Project project
-
+class CqPackagePluginSpec extends PluginProjectSpec {
 
     def setup() {
-        project = CqPackageTestUtils.createCqPackageProject()
+        project.logging.level = LogLevel.DEBUG
+        project.version = '2.3.4'
+        project.apply plugin: 'com.twcable.cq-package'
+        project.apply plugin: 'java'
+
+        project.tasks.withType(CreatePackageTask) { CreatePackageTask task ->
+            task.bundleInstallRoot = '/apps/install'
+        }
+
         def subproject1 = createSubProject(project, 'subproject1', true)
         addProjectToCompile(project, subproject1)
     }
@@ -77,6 +83,12 @@ class CqPackagePluginSpec extends Specification {
 
         expect:
         project.slingServers instanceof SlingServersConfiguration
+    }
+
+
+    @Override
+    String getPluginName() {
+        return 'com.twcable.cq-package'
     }
 
 }

@@ -56,6 +56,8 @@ dependencies {
         exclude group: 'org.codehaus.groovy', module: 'groovy-all'
         exclude group: 'org.hamcrest', module: 'hamcrest-core'
     }
+    testCompile 'com.netflix.nebula:nebula-test:3.1.0'
+    testCompile "org.gradle:gradle-tooling-api:${gradle.gradleVersion}" // hack to get the source
 }
 
 bintray {
