@@ -16,6 +16,7 @@
 package com.twcable.gradle.cqpackage
 
 import groovy.transform.TypeChecked
+import groovy.util.logging.Slf4j
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.file.CopySpec
@@ -35,6 +36,7 @@ import static com.twcable.gradle.cqpackage.CreatePackageTask.CopyBundlesMode.NON
 import static com.twcable.gradle.cqpackage.CreatePackageTask.CopyBundlesMode.PROJECT_ONLY
 import static java.util.Collections.EMPTY_LIST
 
+@Slf4j
 @TypeChecked
 class CreatePackageTask extends Zip {
     private String _bundleInstallRoot = '/apps/install'

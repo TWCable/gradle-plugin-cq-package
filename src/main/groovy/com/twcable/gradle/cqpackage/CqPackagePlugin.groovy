@@ -18,6 +18,7 @@ package com.twcable.gradle.cqpackage
 import com.twcable.gradle.sling.SlingServersConfiguration
 import com.twcable.gradle.sling.osgi.SlingBundleConfiguration
 import groovy.transform.TypeChecked
+import groovy.util.logging.Slf4j
 import org.gradle.api.DefaultTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -66,6 +67,7 @@ import static com.twcable.gradle.GradleUtils.extension
  * @see SlingServersConfiguration
  * @see CreatePackageTask
  */
+@Slf4j
 @TypeChecked
 @SuppressWarnings(["GroovyResultOfAssignmentUsed", "GrMethodMayBeStatic"])
 class CqPackagePlugin implements Plugin<Project> {
@@ -75,13 +77,13 @@ class CqPackagePlugin implements Plugin<Project> {
 
     @Override
     void apply(Project project) {
-        project.logger.info("Applying ${this.class.name} to ${project}")
+        log.info("Applying ${this.class.name} to ${project}")
 
         addDepConfiguration(project)
 
-        com.twcable.gradle.GradleUtils.extension(project, CqPackageHelper, project)
-        com.twcable.gradle.GradleUtils.extension(project, SlingBundleConfiguration, project)
-        com.twcable.gradle.GradleUtils.extension(project, SlingServersConfiguration)
+        extension(project, CqPackageHelper, project)
+        extension(project, SlingBundleConfiguration, project)
+        extension(project, SlingServersConfiguration)
 
         addTasks(project)
         // GradleUtils.taskDependencyGraph(project)
@@ -90,7 +92,7 @@ class CqPackagePlugin implements Plugin<Project> {
 
     @SuppressWarnings("GroovyAssignabilityCheck")
     private void addDepConfiguration(Project project) {
-        project.logger.debug("Creating configuration: ${CQ_PACKAGE}")
+        log.debug("Creating configuration: ${CQ_PACKAGE}")
         def cqPackageConf = project.configurations.create CQ_PACKAGE
 
         // attach to "runtime", but don't insist that it have to be there first (or will ever be there)
@@ -100,19 +102,21 @@ class CqPackagePlugin implements Plugin<Project> {
                 if (it instanceof Configuration) {
                     Configuration conf = (Configuration)it
                     if (conf.name == "runtime") {
+                        log.debug("Making ${CQ_PACKAGE} extend from ${conf.name}")
                         cqPackageConf.extendsFrom(conf)
                     }
                 }
             }
         }
         else {
+            log.debug("Making ${CQ_PACKAGE} extend from ${runtimeConf.name}")
             cqPackageConf.extendsFrom(runtimeConf)
         }
     }
 
 
     private void addTasks(Project project) {
-        project.logger.debug "Adding tasks for ${this.class.name} to ${project}"
+        log.debug "Adding tasks for ${this.class.name} to ${project}"
 
         def verifyBundles = verifyBundles(project)
         def addBundlesToFilterXml = addBundlesToFilterXml(project)
@@ -329,7 +333,7 @@ class CqPackagePlugin implements Plugin<Project> {
 
 
     static CqPackageHelper getCqPackageHelper(Project project) {
-        return (CqPackageHelper)com.twcable.gradle.GradleUtils.extension(project, CqPackageHelper)
+        return (CqPackageHelper)extension(project, CqPackageHelper)
     }
 
 
