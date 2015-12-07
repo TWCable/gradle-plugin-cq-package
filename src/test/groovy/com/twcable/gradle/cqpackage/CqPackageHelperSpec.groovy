@@ -43,11 +43,13 @@ class CqPackageHelperSpec extends Specification {
 
 
     def setup() {
-        slingServersConfiguration.maxWaitValidateBundlesMs >> 1000
-        slingServersConfiguration.retryWaitMs >> 10
         slingServersConfiguration.iterator() >> [slingServerConfiguration].iterator()
-        slingServerConfiguration.getSlingSupport() >> slingSupport
+
+        slingServerConfiguration.maxWaitMs >> 1_000
+        slingServerConfiguration.retryWaitMs >> 10
         slingServerConfiguration.getActive() >> true
+        slingServerConfiguration.getBaseUri() >> URI.create('http://test')
+
         SimpleHttpClient httpClient = Mock(SimpleHttpClient)
         slingSupport.doHttp(_) >> { Closure closure -> closure.delegate = slingSupport; closure.call(httpClient) }
 
@@ -63,8 +65,8 @@ class CqPackageHelperSpec extends Specification {
 
     def "upload package, no problems"() {
         def json = new JsonBuilder(packageList)
-        1 * slingSupport.doGet(_, _) >> { new HttpResponse(HTTP_OK, json.toString()) }
-        1 * slingSupport.doPost(_, _, _) >> { new HttpResponse(HTTP_OK, '{"success": true, "msg": "File uploaded"}') }
+        1 * slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
+        1 * slingSupport.doPost(_, _) >> { new HttpResponse(HTTP_OK, '{"success": true, "msg": "File uploaded"}') }
 
         cqPackageHelper.packageManager = Mock(PackageManager) {
             open(_) >> {
@@ -75,27 +77,27 @@ class CqPackageHelperSpec extends Specification {
         }
 
         expect:
-        cqPackageHelper.uploadPackage()
+        cqPackageHelper.uploadPackage(slingPackageSupportFactory)
     }
 
 
     def "install package, no problems"() {
         def json = new JsonBuilder(packageList)
-        1 * slingSupport.doGet(_, _) >> { new HttpResponse(HTTP_OK, json.toString()) }
-        1 * slingSupport.doPost(_, _, _) >> { new HttpResponse(HTTP_OK, '{"success": true, "msg": "File installed"}') }
+        1 * slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
+        1 * slingSupport.doPost(_, _) >> { new HttpResponse(HTTP_OK, '{"success": true, "msg": "File installed"}') }
 
         expect:
-        cqPackageHelper.installPackage()
+        cqPackageHelper.installPackage(slingPackageSupportFactory)
     }
 
 
     def "delete package, no problems"() {
         def json = new JsonBuilder(packageList)
-        1 * slingSupport.doGet(_, _) >> { new HttpResponse(HTTP_OK, json.toString()) }
-        1 * slingSupport.doPost(_, _, _) >> { new HttpResponse(HTTP_OK, '{"success": true, "msg": "File deleted"}') }
+        1 * slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
+        1 * slingSupport.doPost(_, _) >> { new HttpResponse(HTTP_OK, '{"success": true, "msg": "File deleted"}') }
 
         expect:
-        cqPackageHelper.deletePackage()
+        cqPackageHelper.deletePackage(slingPackageSupportFactory)
     }
 
 
@@ -108,11 +110,11 @@ class CqPackageHelperSpec extends Specification {
             }
         }
 
-        1 * slingSupport.doPost(_, _, _) >>
+        1 * slingSupport.doPost(_, _) >>
             new HttpResponse(HTTP_OK, '{"success":false, "msg":"Package already exists: fakepackage"}')
 
         when:
-        cqPackageHelper.uploadPackage()
+        cqPackageHelper.uploadPackage(slingPackageSupportFactory)
 
         then:
         def exp = thrown(GradleException)
@@ -122,20 +124,19 @@ class CqPackageHelperSpec extends Specification {
 
     def "listPackages for a server configuration"() {
         def json = new JsonBuilder(packageList)
-        1 * slingSupport.doGet(_, _) >> { new HttpResponse(HTTP_OK, json.toString()) }
+        1 * slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
 
         expect:
-        cqPackageHelper.listPackages(slingServerConfiguration)
+        cqPackageHelper.listPackages(slingPackageSupportFactory.create(slingServerConfiguration))
     }
 
 
     def "getPackageInfo for a server configuration"() {
         def json = new JsonBuilder(packageList)
-        slingSupport.doGet(_, _) >> { new HttpResponse(HTTP_OK, json.toString()) }
-        slingServerConfiguration.getPackageListUri() >> URI.create('http://test')
+        slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
 
         expect:
-        cqPackageHelper.getPackageInfo(slingServerConfiguration)
+        cqPackageHelper.getPackageInfo(slingPackageSupportFactory.create(slingServerConfiguration))
     }
 
 
@@ -234,5 +235,10 @@ class CqPackageHelperSpec extends Specification {
             ]
         ],
         total  : 16]
+
+
+    SimpleSlingPackageSupportFactory getSlingPackageSupportFactory() {
+        return new SimpleSlingPackageSupportFactory({ slingSupport })
+    }
 
 }

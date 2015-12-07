@@ -28,7 +28,7 @@ class InstallPackageSpec extends AbstractPackageCommandSpec {
         setupSlingSupport(success, msg, installedPackage)
 
         when:
-        def retStatus = InstallPackage.install("fakepackage", slingServerConfiguration, 20, 10)
+        def retStatus = InstallPackage.install("fakepackage", slingPackageSupportFactory.create(slingServerConfiguration))
 
         then:
         retStatus == status

@@ -28,7 +28,7 @@ class DeletePackageSpec extends AbstractPackageCommandSpec {
         setupSlingSupport(success, msg, installedPackage)
 
         when:
-        def retStatus = DeletePackage.delete("fakepackage", slingServerConfiguration, 20, 10)
+        def retStatus = DeletePackage.delete("fakepackage", slingPackageSupportFactory.create(slingServerConfiguration))
 
         then:
         retStatus == status

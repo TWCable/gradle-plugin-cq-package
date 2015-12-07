@@ -16,6 +16,7 @@
 package com.twcable.gradle.cqpackage
 
 import com.twcable.gradle.sling.SlingServersConfiguration
+import com.twcable.gradle.sling.osgi.BundleAndServers
 import com.twcable.gradle.sling.osgi.SlingBundleConfiguration
 import groovy.transform.TypeChecked
 import groovy.util.logging.Slf4j
@@ -83,7 +84,7 @@ class CqPackagePlugin implements Plugin<Project> {
 
         extension(project, CqPackageHelper, project)
         extension(project, SlingBundleConfiguration, project)
-        extension(project, SlingServersConfiguration)
+        extension(project, SlingServersConfiguration, project)
 
         addTasks(project)
         // GradleUtils.taskDependencyGraph(project)
@@ -180,7 +181,7 @@ class CqPackagePlugin implements Plugin<Project> {
             task.group = 'CQ'
             task.dependsOn 'uploadRemote'
             task.doLast {
-                getCqPackageHelper(project).installPackage()
+                getCqPackageHelper(project).installPackage(SimpleSlingPackageSupportFactory.INSTANCE)
             }
 
             task.addValidator({ TaskInternal t, Collection<String> messages ->
@@ -197,7 +198,7 @@ class CqPackagePlugin implements Plugin<Project> {
             task.description = "Installs the CQ Package"
             task.group = 'CQ'
             task.doLast {
-                getCqPackageHelper(project).installPackage()
+                getCqPackageHelper(project).installPackage(SimpleSlingPackageSupportFactory.INSTANCE)
             }
             task.mustRunAfter 'upload'
         }
@@ -211,7 +212,7 @@ class CqPackagePlugin implements Plugin<Project> {
         ], 'uploadRemote')
 
         task.doLast {
-            getCqPackageHelper(project).uploadPackage()
+            getCqPackageHelper(project).uploadPackage(SimpleSlingPackageSupportFactory.INSTANCE)
         }
 
         task.dependsOn 'createPackage'
@@ -223,7 +224,7 @@ class CqPackagePlugin implements Plugin<Project> {
 
     Task upload(Project project) {
         Task task = project.task([description: "Uploads the CQ Package", group: 'CQ'], 'upload') << {
-            getCqPackageHelper(project).uploadPackage()
+            getCqPackageHelper(project).uploadPackage(SimpleSlingPackageSupportFactory.INSTANCE)
         }
 
         task.dependsOn 'createPackage'
@@ -305,7 +306,7 @@ class CqPackagePlugin implements Plugin<Project> {
         ], 'remove')
 
         removeTask.doLast {
-            getCqPackageHelper(project).deletePackage()
+            getCqPackageHelper(project).deletePackage(SimpleSlingPackageSupportFactory.INSTANCE)
         }
 
         removeTask.mustRunAfter 'checkBundleStatus', 'uninstall'
@@ -323,7 +324,7 @@ class CqPackagePlugin implements Plugin<Project> {
         ], 'uninstall')
 
         uninstallTask.doLast {
-            getCqPackageHelper(project).uninstallPackage()
+            getCqPackageHelper(project).uninstallPackage(SimpleSlingPackageSupportFactory.INSTANCE)
         }
 
         uninstallTask.mustRunAfter('createPackage')
@@ -346,17 +347,13 @@ class CqPackagePlugin implements Plugin<Project> {
         ], 'uninstallBundles')
 
         task.doLast {
-            def serversConfiguration = project.extensions.getByType(SlingServersConfiguration)
-
-            // if the uninstallBundlesPredicate was not set, default to uninstalling bundles where the symbolic
+            // Default to uninstalling bundles where the symbolic
             // name match this project's group name
-            if (serversConfiguration.uninstallBundlesPredicate == null) {
-                serversConfiguration.uninstallBundlesPredicate = { String symbolicName ->
-                    symbolicName?.contains(project.group as CharSequence)
-                }
-            }
+            def uninstallBundlesPredicate = { String symbolicName ->
+                symbolicName?.contains(project.group as CharSequence)
+            } as BundleAndServers.UninstallBundlePredicate
 
-            getCqPackageHelper(project).uninstallBundles()
+            getCqPackageHelper(project).uninstallBundles(uninstallBundlesPredicate)
         }
         return task
     }

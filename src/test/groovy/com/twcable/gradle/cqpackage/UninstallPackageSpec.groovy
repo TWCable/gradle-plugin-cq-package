@@ -29,7 +29,7 @@ class UninstallPackageSpec extends AbstractPackageCommandSpec {
         setupSlingSupport(success, msg, installedPackage)
 
         when:
-        def retStatus = UninstallPackage.uninstall("fakepackage", slingServerConfiguration, 20, 10)
+        def retStatus = UninstallPackage.uninstall("fakepackage", slingPackageSupportFactory.create(slingServerConfiguration))
 
         then:
         retStatus == status

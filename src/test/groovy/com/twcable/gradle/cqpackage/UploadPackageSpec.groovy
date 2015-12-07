@@ -29,7 +29,7 @@ class UploadPackageSpec extends AbstractPackageCommandSpec {
         def packageFile = new File(CqPackageHelperSpec.class.classLoader.getResource("testpackage-1.0.1.zip").getFile())
 
         when:
-        def retStatus = UploadPackage.upload(packageFile, false, slingServerConfiguration, 20, 10, new PackageManagerImpl())
+        def retStatus = UploadPackage.upload(packageFile, false, slingPackageSupportFactory.create(slingServerConfiguration), new PackageManagerImpl())
 
         then:
         retStatus == status

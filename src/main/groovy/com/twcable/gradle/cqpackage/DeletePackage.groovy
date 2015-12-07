@@ -22,12 +22,6 @@ import groovy.util.logging.Slf4j
 
 import javax.annotation.Nonnull
 
-import static com.twcable.gradle.cqpackage.PackageStatus.NO_PACKAGE
-import static com.twcable.gradle.cqpackage.PackageStatus.UNKNOWN
-import static com.twcable.gradle.cqpackage.Status.OK
-import static com.twcable.gradle.cqpackage.Status.SERVER_INACTIVE
-import static com.twcable.gradle.cqpackage.Status.SERVER_TIMEOUT
-
 @Slf4j
 @CompileStatic
 class DeletePackage {
@@ -45,16 +39,14 @@ class DeletePackage {
         } as CqPackageCommand.SuccessFalseHandler
 
     /**
-     * Iterates through all of the servers in "slingServersConfiguration" and deletes the given package on them.
+     * Iterates through all of the servers in "serversConfiguration" and deletes the given package on them.
      *
-     * @see #delete(String, SlingServerConfiguration, long, long)
+     * @see #delete(String, SlingPackageSupport)
      * @see #consumeStatus(Status, String, SlingServerConfiguration)
      */
-    static void delete(String packageName, SlingServersConfiguration slingServersConfiguration) {
-        slingServersConfiguration.each { serverConfig ->
-            long maxWaitMs = slingServersConfiguration.maxWaitValidateBundlesMs
-            long retryWaitMs = slingServersConfiguration.retryWaitMs
-            def status = delete(packageName, serverConfig, maxWaitMs, retryWaitMs)
+    static void delete(String packageName, SlingServersConfiguration serversConfiguration, SlingPackageSupportFactory factory) {
+        serversConfiguration.each { serverConfig ->
+            def status = delete(packageName, factory.create(serverConfig))
             consumeStatus(status, packageName, serverConfig)
         }
     }
@@ -87,8 +79,8 @@ class DeletePackage {
      * @return the {@link PackageStatus} of doing the delete
      */
     @Nonnull
-    static Status delete(String packageName, SlingServerConfiguration serverConfig, long maxWaitMs, long retryWaitMs) {
-        return CqPackageCommand.doCommand("delete", packageName, serverConfig, maxWaitMs, retryWaitMs, falseStatusHandler)
+    static Status delete(String packageName, SlingPackageSupport packageSupport) {
+        return CqPackageCommand.doCommand("delete", packageName, packageSupport, falseStatusHandler)
     }
 
 }
