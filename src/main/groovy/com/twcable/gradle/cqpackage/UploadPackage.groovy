@@ -17,6 +17,7 @@ package com.twcable.gradle.cqpackage
 
 import com.twcable.gradle.sling.SlingServerConfiguration
 import com.twcable.gradle.sling.SlingServersConfiguration
+import com.twcable.gradle.sling.SlingSupportFactory
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import org.apache.http.entity.mime.content.FileBody
@@ -53,19 +54,17 @@ class UploadPackage {
     /**
      * Iterates through all of the servers in "slingServersConfiguration" and installs the given package on them.
      *
-     * @see #upload(File, boolean, SlingServerConfiguration, long, long, PackageManager)
+     * @see #upload(File, boolean, SlingPackageSupport, PackageManager)
      * @see #consumeStatus(Status, String, SlingServerConfiguration)
      */
     static void upload(File packageFile,
                        SlingServersConfiguration slingServersConfiguration,
+                       SlingPackageSupportFactory factory,
                        PackageManager packageManager) {
-        long maxWaitMs = slingServersConfiguration.maxWaitValidateBundlesMs
-        long retryWaitMs = slingServersConfiguration.retryWaitMs
-
         if (packageManager == null) packageManager = new PackageManagerImpl()
 
         slingServersConfiguration.each { serverConfig ->
-            def status = upload(packageFile, false, serverConfig, maxWaitMs, retryWaitMs, packageManager)
+            def status = upload(packageFile, false, factory.create(serverConfig), packageManager)
             consumeStatus(status, packageFile.name, serverConfig)
         }
     }
@@ -92,15 +91,12 @@ class UploadPackage {
      *
      * @param packageName the name of the package to install
      * @param force should this overwrite an existing package of exactly the same filename?
-     * @param serverConfig the configuration of the server to install on
-     * @param maxWaitMs the maximum amount of time, in milliseconds, to wait for the install to finish
-     * @param retryWaitMs the amount of time to wait while polling for status updates
+     * @param packageSupport the configuration of the server to install on
      *
      * @return the {@link PackageStatus} of doing the install
      */
     @Nonnull
-    static Status upload(File packageFile, boolean force, SlingServerConfiguration serverConfig,
-                         long maxWaitMs, long retryWaitMs, PackageManager packageManager) {
+    static Status upload(File packageFile, boolean force, SlingPackageSupport packageSupport, PackageManager packageManager) {
         if (packageManager == null) packageManager = new PackageManagerImpl()
 
         /*
@@ -155,9 +151,9 @@ in other words, there's no indication it's missing its dependency at this point
          */
         final packageName = packageManager.open(packageFile).id.name
         final postParams = ['force': Boolean.toString(force), 'package': new FileBody(packageFile, 'application/zip')]
-        final uploadStatus = CqPackageCommand.doCommand("upload", packageName, serverConfig, maxWaitMs, retryWaitMs, postParams, falseStatusHandler)
+        final uploadStatus = CqPackageCommand.doCommand("upload", packageName, packageSupport, postParams, falseStatusHandler)
         if (uploadStatus == OK) {
-            final packageInfoSF = RuntimePackageProperties.packageProperties(serverConfig, maxWaitMs, retryWaitMs, packageName)
+            final packageInfoSF = RuntimePackageProperties.packageProperties(packageSupport, packageName)
             if (packageInfoSF.failed()) return packageInfoSF.error
             return packageInfoSF.value.hasUnresolvedDependencies() ? UNRESOLVED_DEPENDENCIES : OK
         }

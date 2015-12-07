@@ -15,11 +15,11 @@
  */
 package com.twcable.gradle.cqpackage
 
-import com.twcable.gradle.http.SimpleHttpClient
 import com.twcable.gradle.sling.SlingServerConfiguration
 import com.twcable.gradle.sling.SlingServersConfiguration
+import com.twcable.gradle.sling.osgi.BundleAndServers
 import com.twcable.gradle.sling.osgi.SlingBundleConfiguration
-import com.twcable.gradle.sling.osgi.SlingOsgiBundle
+import com.twcable.gradle.sling.osgi.SlingBundleSupport
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import org.apache.commons.io.IOUtils
@@ -45,8 +45,6 @@ import java.util.jar.Manifest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipException
 import java.util.zip.ZipFile
-
-import static com.twcable.gradle.cqpackage.Status.SERVER_TIMEOUT
 
 /**
  * Has external dependencies on {@link SlingServersConfiguration}
@@ -80,18 +78,6 @@ class CqPackageHelper {
         project.extensions.getByType(SlingServersConfiguration)
     }
 
-
-    @Deprecated
-    long getRetryWaitMs() {
-        return slingServersConfiguration().retryWaitMs
-    }
-
-
-    @Deprecated
-    long getMaxWaitMs() {
-        return slingServersConfiguration().maxWaitValidateBundlesMs
-    }
-
     /**
      * Returns the name of the project, which is used as the name of the package.
      */
@@ -101,18 +87,18 @@ class CqPackageHelper {
     }
 
 
-    void installPackage() {
-        InstallPackage.install(packageName, slingServersConfiguration())
+    void installPackage(SlingPackageSupportFactory factory) {
+        InstallPackage.install(packageName, slingServersConfiguration(), factory)
     }
 
 
-    void uninstallPackage() {
-        UninstallPackage.uninstall(packageName, slingServersConfiguration())
+    void uninstallPackage(SlingPackageSupportFactory factory) {
+        UninstallPackage.uninstall(packageName, slingServersConfiguration(), factory)
     }
 
 
-    void deletePackage() {
-        DeletePackage.delete(packageName, slingServersConfiguration())
+    void deletePackage(SlingPackageSupportFactory factory) {
+        DeletePackage.delete(packageName, slingServersConfiguration(), factory)
     }
 
     /**
@@ -121,13 +107,15 @@ class CqPackageHelper {
      * @return null only if the server timed out (in which case "active" is disabled on the passed serverConfig)
      */
     @Nullable
-    Collection<RuntimePackageProperties> listPackages(SlingServerConfiguration serverConfig) {
-        if (!serverConfig.active) return null
+    Collection<RuntimePackageProperties> listPackages(SlingPackageSupport slingPackageSupport) {
+        def serverConf = slingPackageSupport.packageServerConf.serverConf
+        if (!serverConf.active) return null
 
-        def packagesSF = ListPackages.listPackages(serverConfig, maxWaitMs, retryWaitMs)
+        def packagesSF = ListPackages.listPackages(slingPackageSupport)
         if (packagesSF.error != null) {
             switch (packagesSF.error) {
-                case Status.SERVER_TIMEOUT: serverConfig.active = false; return null
+                case Status.SERVER_TIMEOUT:
+                    serverConf.active = false; return null
                 default: throw new GradleException("Unknown status from listing packages: ${packagesSF.error}")
             }
         }
@@ -140,16 +128,17 @@ class CqPackageHelper {
      * @return null if the package is not found on the server
      *
      * @see #getPackageName()
-     * @deprecated use {@link RuntimePackageProperties#packageProperties(SlingServerConfiguration, long, long, java.lang.String)}
+     * @deprecated use {@link RuntimePackageProperties#packageProperties(SlingPackageSupport, String)}
      */
     @Nullable
-    RuntimePackageProperties getPackageInfo(SlingServerConfiguration serverConfig) {
-        if (!serverConfig.active) return null
+    RuntimePackageProperties getPackageInfo(SlingPackageSupport slingPackageSupport) {
+        if (!slingPackageSupport.active) return null
 
-        def packageInfoSF = RuntimePackageProperties.packageProperties(serverConfig, maxWaitMs, retryWaitMs, packageName)
+        def packageInfoSF = RuntimePackageProperties.packageProperties(slingPackageSupport, packageName)
+
         if (packageInfoSF.failed()) {
             switch (packageInfoSF.error) {
-                case Status.SERVER_TIMEOUT: serverConfig.active = false; return null
+                case Status.SERVER_TIMEOUT: slingPackageSupport.active = false; return null
                 default: return null
             }
         }
@@ -157,16 +146,14 @@ class CqPackageHelper {
     }
 
 
-    void uploadPackage() {
+    void uploadPackage(@Nonnull SlingPackageSupportFactory factory) {
+        if (factory == null) throw new IllegalArgumentException("factory == null")
         File sourceFile = UploadPackage.getThePackageFile(project)
 
         final slingServersConfiguration = slingServersConfiguration()
-        final maxWaitMs = slingServersConfiguration.maxWaitValidateBundlesMs
-        final retryWaitMs = slingServersConfiguration.retryWaitMs
 
         slingServersConfiguration.each { SlingServerConfiguration serverConfig ->
-            UploadPackage.upload(sourceFile, false, serverConfig,
-                maxWaitMs, retryWaitMs, packageManager)
+            UploadPackage.upload(sourceFile, false, factory.create(serverConfig), packageManager)
         }
     }
 
@@ -206,104 +193,83 @@ class CqPackageHelper {
     }
 
 
-    void checkActiveBundles(String groupProperty) {
+    BundleAndServers getBundleAndServers() {
         def slingBundleConfiguration = slingBundleConfiguration()
-        def slingBundle = new SlingOsgiBundle(slingBundleConfiguration)
         def slingServersConfiguration = slingServersConfiguration()
+        return new BundleAndServers(slingBundleConfiguration, slingServersConfiguration)
+    }
 
-        slingServersConfiguration.each { slingServerConfiguration ->
-            def slingSupport = slingServerConfiguration.slingSupport
 
-            slingSupport.doHttp { httpClient ->
-                slingBundle.checkActiveBundles(groupProperty, httpClient, slingServerConfiguration)
-            }
+    void checkActiveBundles(String groupProperty) {
+        bundleAndServers.doAcrossServers { SlingBundleSupport slingBundleSupport ->
+            bundleAndServers.checkActiveBundles(groupProperty, slingBundleSupport)
         }
     }
 
     /**
-     * Calls {@link SlingOsgiBundle#startInactiveBundles(SimpleHttpClient, SlingServerConfiguration)} for
+     * Calls {@link BundleAndServers#startInactiveBundles(SlingBundleSupport)} for
      * each server in {@link SlingServersConfiguration}
      */
     void startInactiveBundles() {
-        SlingOsgiBundle slingBundle = new SlingOsgiBundle(slingBundleConfiguration())
-        slingServersConfiguration().each { SlingServerConfiguration slingServerConfiguration ->
-            slingServerConfiguration.slingSupport.doHttp { SimpleHttpClient httpClient ->
-                slingBundle.startInactiveBundles(httpClient, slingServerConfiguration)
-            }
+        bundleAndServers.doAcrossServers { SlingBundleSupport slingBundleSupport ->
+            bundleAndServers.startInactiveBundles(slingBundleSupport)
         }
     }
 
 
     void validateBundles(Configuration configuration) {
         def resolvedConfiguration = configuration.resolvedConfiguration
-        def slingBundleConfiguration = slingBundleConfiguration()
-        def slingBundle = new SlingOsgiBundle(slingBundleConfiguration)
-        def slingServersConfiguration = slingServersConfiguration()
-
-        slingServersConfiguration.each { slingServerConfiguration ->
-            def slingSupport = slingServerConfiguration.slingSupport
-
-            slingSupport.doHttp { httpClient ->
-                def symbolicNamesList = buildSymbolicNamesList(resolvedConfiguration)
-                slingBundle.validateAllBundles(symbolicNamesList, httpClient, slingServerConfiguration)
-            }
+        def symbolicNamesList = buildSymbolicNamesList(resolvedConfiguration)
+        bundleAndServers.doAcrossServers { SlingBundleSupport slingBundleSupport ->
+            bundleAndServers.validateAllBundles(symbolicNamesList, slingBundleSupport)
         }
     }
 
 
     void validateRemoteBundles() {
-        def slingBundleConfiguration = slingBundleConfiguration()
-        def slingBundle = new SlingOsgiBundle(slingBundleConfiguration)
-        def slingServersConfiguration = slingServersConfiguration()
-
-        slingServersConfiguration.each { slingServerConfiguration ->
-            def slingSupport = slingServerConfiguration.slingSupport
-
-            slingSupport.doHttp { httpClient ->
-                def namesFromDownloadedPackage = symbolicNamesFromDownloadedPackage(slingServerConfiguration)
-
-                slingBundle.validateAllBundles(namesFromDownloadedPackage, httpClient, slingServerConfiguration)
-            }
+        bundleAndServers.doAcrossServers { SlingBundleSupport slingBundleSupport ->
+            def packageServerConf = new PackageServerConfiguration(slingBundleSupport.serverConf)
+            def packageSupport = new SlingPackageSupport(packageServerConf, slingBundleSupport.slingSupport)
+            def namesFromDownloadedPackage = symbolicNamesFromDownloadedPackage(packageSupport)
+            bundleAndServers.validateAllBundles(namesFromDownloadedPackage, slingBundleSupport)
         }
     }
 
 
-    void uninstallBundles() {
-        def slingBundleConfiguration = slingBundleConfiguration()
-        def slingBundle = new SlingOsgiBundle(slingBundleConfiguration)
-        def slingServersConfiguration = slingServersConfiguration()
-
-        slingServersConfiguration.each { slingServerConfiguration ->
-            def packageInfo = getPackageInfo(slingServerConfiguration)
+    void uninstallBundles(BundleAndServers.UninstallBundlePredicate bundlePredicate) {
+        bundleAndServers.doAcrossServers { SlingBundleSupport slingBundleSupport ->
+            def serverConf = slingBundleSupport.serverConf
+            def packageServerConfiguration = new PackageServerConfiguration(serverConf)
+            def slingPackageSupport = new SlingPackageSupport(packageServerConfiguration, slingBundleSupport.slingSupport)
+            def packageInfo = getPackageInfo(slingPackageSupport)
             if (packageInfo != null) { // package is installed
-                slingServerConfiguration.slingSupport.doHttp { httpClient ->
-                    def namesFromDownloadedPackage = symbolicNamesFromDownloadedPackage(slingServerConfiguration)
-                    slingBundle.uninstallAllBundles(namesFromDownloadedPackage, httpClient,
-                        slingServerConfiguration, slingServersConfiguration.uninstallBundlesPredicate)
-                }
+                def namesFromDownloadedPackage = symbolicNamesFromDownloadedPackage(slingPackageSupport)
+                bundleAndServers.uninstallAllBundles(namesFromDownloadedPackage, slingBundleSupport, bundlePredicate)
             }
             else {
-                log.info("${packageName} is not on ${slingServerConfiguration.name}")
+                log.info("${packageName} is not on ${serverConf.name}")
             }
         }
     }
 
 
-    List<String> symbolicNamesFromDownloadedPackage(SlingServerConfiguration serverConfig) {
+    List<String> symbolicNamesFromDownloadedPackage(SlingPackageSupport slingPackageSupport) {
         try {
             File downloadDir = new File("${project.buildDir}/tmp")
             downloadDir.mkdirs()
-            def packageInfo = getPackageInfo(serverConfig)
+            def packageInfo = getPackageInfo(slingPackageSupport)
             String packageFilename = packageInfo.downloadName
             packageFilename = "${downloadDir}/${packageFilename}".replace("downloadName=", "")
             final path = packageInfo.path
-            final zipUri = URI.create("${serverConfig.downloadUri}?_charset_=utf8&${path}")
+
+            def packageServerConf = slingPackageSupport.packageServerConf
+            final zipUri = URI.create("${packageServerConf.packageDownloadUri}?_charset_=utf8&${path}")
 
             log.info("Filename from package list: $packageFilename")
             log.info("Filepath from package list: $path")
             log.info("Zip URI from package list: $zipUri")
 
-            def file = downloadFile(packageFilename, zipUri, serverConfig)
+            def file = downloadFile(packageFilename, zipUri, packageServerConf.serverConf)
             def zipFile = new ZipFile(file)
             def zipEntries = zipFile.entries().findAll { ZipEntry entry -> entry.name.endsWith(".jar") } as List
 
@@ -341,7 +307,7 @@ class CqPackageHelper {
             return symbolicNames
         }
         catch (Exception exp) {
-            log.error "There was a problem getting symbolic names from downloaded package \"${serverConfig}\""
+            log.error "There was a problem getting symbolic names from downloaded package \"${slingPackageSupport.packageServerConf}\""
             throw exp
         }
     }

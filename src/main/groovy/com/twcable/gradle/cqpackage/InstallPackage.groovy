@@ -23,12 +23,6 @@ import org.gradle.api.GradleException
 
 import javax.annotation.Nonnull
 
-import static com.twcable.gradle.cqpackage.PackageStatus.NO_PACKAGE
-import static com.twcable.gradle.cqpackage.PackageStatus.UNKNOWN
-import static com.twcable.gradle.cqpackage.Status.OK
-import static com.twcable.gradle.cqpackage.Status.SERVER_INACTIVE
-import static com.twcable.gradle.cqpackage.Status.SERVER_TIMEOUT
-
 @Slf4j
 @CompileStatic
 class InstallPackage {
@@ -48,14 +42,12 @@ class InstallPackage {
     /**
      * Iterates through all of the servers in "slingServersConfiguration" and installs the given package on them.
      *
-     * @see #install(String, SlingServerConfiguration, long, long)
+     * @see #install(String, SlingPackageSupport)
      * @see #consumeStatus(Status, String, SlingServerConfiguration)
      */
-    static void install(String packageName, SlingServersConfiguration slingServersConfiguration) {
+    static void install(String packageName, SlingServersConfiguration slingServersConfiguration, SlingPackageSupportFactory factory) {
         slingServersConfiguration.each { serverConfig ->
-            long maxWaitMs = slingServersConfiguration.maxWaitValidateBundlesMs
-            long retryWaitMs = slingServersConfiguration.retryWaitMs
-            def status = install(packageName, serverConfig, maxWaitMs, retryWaitMs)
+            def status = install(packageName, factory.create(serverConfig))
             consumeStatus(status, packageName, serverConfig)
         }
     }
@@ -81,15 +73,13 @@ class InstallPackage {
      * Installs the given package using the provided server configuration.
      *
      * @param packageName the name of the package to install
-     * @param serverConfig the configuration of the server to install on
-     * @param maxWaitMs the maximum amount of time, in milliseconds, to wait for the install to finish
-     * @param retryWaitMs the amount of time to wait while polling for status updates
+     * @param packageSupport the configuration of the server to install on
      *
      * @return the {@link PackageStatus} of doing the install
      */
     @Nonnull
-    static Status install(String packageName, SlingServerConfiguration serverConfig, long maxWaitMs, long retryWaitMs) {
-        return CqPackageCommand.doCommand("install", packageName, serverConfig, maxWaitMs, retryWaitMs, falseStatusHandler)
+    static Status install(String packageName, SlingPackageSupport packageSupport) {
+        return CqPackageCommand.doCommand("install", packageName, packageSupport, falseStatusHandler)
     }
 
 }

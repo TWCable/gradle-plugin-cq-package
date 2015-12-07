@@ -16,8 +16,8 @@
 package com.twcable.gradle.cqpackage
 
 import com.twcable.gradle.http.HttpResponse
-import com.twcable.gradle.http.SimpleHttpClient
 import com.twcable.gradle.sling.SlingServerConfiguration
+import com.twcable.gradle.sling.SlingSupport
 import groovy.json.JsonSlurper
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
@@ -25,11 +25,7 @@ import org.gradle.api.GradleException
 
 import javax.annotation.Nonnull
 
-import static com.twcable.gradle.cqpackage.Status.OK
-import static com.twcable.gradle.cqpackage.Status.SERVER_TIMEOUT
-import static com.twcable.gradle.cqpackage.Status.UNKNOWN
 import static com.twcable.gradle.cqpackage.SuccessOrFailure.success
-import static com.twcable.gradle.sling.SlingSupport.block
 import static java.net.HttpURLConnection.HTTP_CLIENT_TIMEOUT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.util.Collections.EMPTY_MAP
@@ -44,9 +40,7 @@ class CqPackageCommand {
      *
      * @param commandName the command to send
      * @param packageName the package to act on
-     * @param serverConfig the configuration of the server to talk to
-     * @param maxWaitMs the maximum amount of time, in milliseconds, to wait for the command to finish
-     * @param retryWaitMs the amount of time to wait while polling for status updates
+     * @param slingPackageSupport the configuration of the server to talk to
      * @param successFalseHandler if the JSON returned has "success: false" then "successFalseHandler" will be
      *                            invoked to try to recover; if successFalseHandler returns UNKNOWN then
      *                            a GradleException is thrown
@@ -56,11 +50,9 @@ class CqPackageCommand {
     @Nonnull
     static Status doCommand(String commandName,
                             String packageName,
-                            SlingServerConfiguration serverConfig,
-                            long maxWaitMs,
-                            long retryWaitMs,
+                            SlingPackageSupport slingPackageSupport,
                             SuccessFalseHandler successFalseHandler) {
-        return doCommand(commandName, packageName, serverConfig, maxWaitMs, retryWaitMs, EMPTY_MAP, successFalseHandler)
+        return doCommand(commandName, packageName, slingPackageSupport, EMPTY_MAP, successFalseHandler)
     }
 
     /**
@@ -68,9 +60,7 @@ class CqPackageCommand {
      *
      * @param commandName the command to send
      * @param packageName the package to act on
-     * @param serverConfig the configuration of the server to talk to
-     * @param maxWaitMs the maximum amount of time, in milliseconds, to wait for the command to finish
-     * @param retryWaitMs the amount of time to wait while polling for status updates
+     * @param slingPackageSupport the configuration of the server to talk to
      * @param postParams the fields to pass in the POST
      * @param successFalseHandler if the JSON returned has "success: false" then "successFalseHandler" will be
      *                            invoked to try to recover; if successFalseHandler returns UNKNOWN then
@@ -81,25 +71,23 @@ class CqPackageCommand {
     @Nonnull
     static Status doCommand(String commandName,
                             String packageName,
-                            SlingServerConfiguration serverConfig,
-                            long maxWaitMs,
-                            long retryWaitMs,
+                            SlingPackageSupport slingPackageSupport,
                             Map postParams,
                             SuccessFalseHandler successFalseHandler) {
-        if (!serverConfig.active) throw new IllegalArgumentException("The server configuration for ${serverConfig.name} is not active")
+        if (!slingPackageSupport.active) throw new IllegalArgumentException("The server configuration for ${slingPackageSupport.packageServerConf.serverConf.name} is not active")
 
-        final packageUriSF = packageURI(commandName, packageName, serverConfig, maxWaitMs, retryWaitMs)
+        final packageUriSF = packageURI(commandName, packageName, slingPackageSupport)
         if (packageUriSF.failed()) return packageUriSF.error
         final URI uri = packageUriSF.value
 
-        final resp = blockAndPost(serverConfig, uri, maxWaitMs, retryWaitMs, postParams)
+        final resp = blockAndPost(slingPackageSupport, uri, postParams)
 
         if (resp.code == HTTP_OK) {
-            return handleHttpOk(commandName, packageName, resp, serverConfig, successFalseHandler)
+            return handleHttpOk(commandName, packageName, resp, slingPackageSupport.packageServerConf.serverConf, successFalseHandler)
         }
         else if (resp.code == HTTP_CLIENT_TIMEOUT) {
             log.error(resp.body)
-            serverConfig.active = false
+            slingPackageSupport.active = false
             return Status.SERVER_TIMEOUT
         }
         else {
@@ -110,18 +98,18 @@ class CqPackageCommand {
 
     static SuccessOrFailure<URI> packageURI(String commandName,
                                             String packageName,
-                                            SlingServerConfiguration serverConfig,
-                                            long maxWaitMs,
-                                            long retryWaitMs) {
+                                            SlingPackageSupport slingPackageSupport) {
+        def packageServerConfig = slingPackageSupport.packageServerConf
+
         if (commandName != "upload") {
-            final packageInfoSF = RuntimePackageProperties.packageProperties(serverConfig, maxWaitMs, retryWaitMs, packageName)
+            final packageInfoSF = RuntimePackageProperties.packageProperties(slingPackageSupport, packageName)
             if (packageInfoSF.failed()) return SuccessOrFailure.failure(packageInfoSF.error)
             def packageInfo = packageInfoSF.value
 
-            return success(URI.create("${serverConfig.packageControlUri}${packageInfo.path}?cmd=${commandName}"))
+            return success(URI.create("${packageServerConfig.packageControlUri}${packageInfo.path}?cmd=${commandName}"))
         }
         else {
-            return success(URI.create("${serverConfig.packageControlUri}?cmd=${commandName}"))
+            return success(URI.create("${packageServerConfig.packageControlUri}?cmd=${commandName}"))
         }
     }
 
@@ -147,14 +135,18 @@ class CqPackageCommand {
     }
 
 
-    private static HttpResponse blockAndPost(SlingServerConfiguration serverConfig,
-                                             URI uri, long maxWaitMs, long retryWaitMs,
-                                             Map postParams) {
+    private static HttpResponse blockAndPost(SlingPackageSupport packageSupport,
+                                             URI uri, Map postParams) {
+        def packageServerConf = packageSupport.packageServerConf
+        def maxWaitMs = packageServerConf.maxWaitMs
+        def retryWaitMs = packageServerConf.retryWaitMs
+
         HttpResponse resp
-        com.twcable.gradle.sling.SlingSupport.block(
+
+        SlingSupport.block(
             maxWaitMs,
             { ![HTTP_OK, HTTP_CLIENT_TIMEOUT].contains(resp?.code) },
-            { resp = doPost(serverConfig, uri, postParams) },
+            { resp = doPost(packageSupport, uri, postParams) },
             retryWaitMs
         )
         return resp
@@ -163,10 +155,15 @@ class CqPackageCommand {
     /**
      * POST to the URI with the given fields
      */
-    static HttpResponse doPost(SlingServerConfiguration serverConfig, URI uri, Map postParams) {
-        final post = serverConfig.slingSupport.doHttp { SimpleHttpClient httpClient ->
-            serverConfig.slingSupport.doPost(uri, postParams != null ? postParams : EMPTY_MAP, httpClient)
-        }
+    @Nonnull
+    static HttpResponse doPost(SlingPackageSupport packageSupport, URI uri, Map postParams) {
+        if (packageSupport == null) throw new IllegalArgumentException("packageSupport == null")
+        if (uri == null) throw new IllegalArgumentException("uri == null")
+
+        def slingSupport = packageSupport.slingSupport
+
+        def post = slingSupport.doPost(uri, postParams != null ? postParams : EMPTY_MAP)
+        if (post == null) throw new IllegalStateException("post == null")
         return post
     }
 

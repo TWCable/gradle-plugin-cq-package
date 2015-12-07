@@ -15,7 +15,6 @@
  */
 package com.twcable.gradle.cqpackage
 
-import com.twcable.gradle.sling.SlingServerConfiguration
 import groovy.json.JsonBuilder
 import groovy.util.logging.Slf4j
 import org.apache.jackrabbit.vault.packaging.Dependency
@@ -24,7 +23,6 @@ import org.apache.jackrabbit.vault.packaging.impl.PackagePropertiesImpl
 import javax.annotation.Nonnull
 
 import static com.twcable.gradle.cqpackage.PackageStatus.NO_PACKAGE
-import static com.twcable.gradle.cqpackage.Status.SERVER_INACTIVE
 import static com.twcable.gradle.cqpackage.SuccessOrFailure.failure
 import static com.twcable.gradle.cqpackage.SuccessOrFailure.success
 
@@ -133,12 +131,11 @@ class RuntimePackageProperties extends PackagePropertiesImpl {
      * Asks the given server for its information for the package identified by "packageName".
      */
     @Nonnull
-    static SuccessOrFailure<RuntimePackageProperties> packageProperties(SlingServerConfiguration serverConfig,
-                                                                        long maxWaitMs, long retryWaitMs,
+    static SuccessOrFailure<RuntimePackageProperties> packageProperties(SlingPackageSupport slingPackageSupport,
                                                                         String packageName) {
-        if (!serverConfig.active) return failure(Status.SERVER_INACTIVE)
+        if (!slingPackageSupport.active) return failure(Status.SERVER_INACTIVE)
 
-        def sf = ListPackages.listPackages(serverConfig, maxWaitMs, retryWaitMs)
+        def sf = ListPackages.listPackages(slingPackageSupport)
         if (sf.failed()) {
             return failure(sf.error)
         }

@@ -37,26 +37,32 @@ abstract class AbstractPackageCommandSpec extends Specification {
         slingSupport.doHttp(_) >> { Closure closure -> closure.delegate = slingSupport; closure.call(httpClient) }
 
         slingServerConfiguration = Mock(SlingServerConfiguration) {
+            getMaxWaitMs() >> 1000
+            getRetryWaitMs() >> 10
             getSlingSupport() >> slingSupport
             getActive() >> true
+            getBaseUri() >> URI.create('http://test')
         }
 
         slingServersConfiguration = Stub(SlingServersConfiguration) {
-            getMaxWaitValidateBundlesMs() >> 1000
-            getRetryWaitMs() >> 10
             iterator() >> [slingServerConfiguration].iterator()
         }
     }
 
 
+    SimpleSlingPackageSupportFactory getSlingPackageSupportFactory() {
+        return new SimpleSlingPackageSupportFactory({ slingSupport })
+    }
+
+
     protected void setupSlingSupport(success, msg, installedPackage) {
         // List Packages
-        slingSupport.doGet(_, _) >> {
+        slingSupport.doGet(_) >> {
             new HttpResponse(HTTP_OK, "{\"results\":[{\"name\":\"${installedPackage}\",\"group\":\"testing\"}]}")
         }
 
         // command POST
-        slingSupport.doPost(_, _, _) >> {
+        slingSupport.doPost(_, _) >> {
             new HttpResponse(HTTP_OK, "{\"success\": ${success}, \"msg\": \"${msg}\"}")
         }
     }

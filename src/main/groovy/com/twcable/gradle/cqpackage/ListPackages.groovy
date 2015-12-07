@@ -16,8 +16,6 @@
 package com.twcable.gradle.cqpackage
 
 import com.twcable.gradle.http.HttpResponse
-import com.twcable.gradle.http.SimpleHttpClient
-import com.twcable.gradle.sling.SlingServerConfiguration
 import com.twcable.gradle.sling.SlingSupport
 import groovy.json.JsonSlurper
 import groovy.transform.CompileStatic
@@ -26,8 +24,6 @@ import org.gradle.api.GradleException
 
 import javax.annotation.Nonnull
 
-import static com.twcable.gradle.cqpackage.Status.SERVER_INACTIVE
-import static com.twcable.gradle.cqpackage.Status.SERVER_TIMEOUT
 import static com.twcable.gradle.cqpackage.SuccessOrFailure.failure
 import static com.twcable.gradle.cqpackage.SuccessOrFailure.success
 import static com.twcable.gradle.sling.SlingSupport.block
@@ -42,11 +38,13 @@ class ListPackages {
      * Asks the given server for all of the CQ Packages that it has, returning their information.
      */
     @Nonnull
-    static SuccessOrFailure<Collection<RuntimePackageProperties>> listPackages(SlingServerConfiguration serverConfig,
-                                                                               long maxWaitMs, long retryWaitMs) {
-        if (!serverConfig.active) return failure(Status.SERVER_INACTIVE)
+    static SuccessOrFailure<Collection<RuntimePackageProperties>> listPackages(SlingPackageSupport packageSupport) {
+        def packageServerConf = packageSupport.packageServerConf
+        def serverConf = packageServerConf.serverConf
 
-        return listPackages(serverConfig.packageListUri, serverConfig.slingSupport, maxWaitMs, retryWaitMs)
+        if (!packageServerConf.serverConf.active) return failure(Status.SERVER_INACTIVE)
+
+        return listPackages(packageServerConf.packageListUri, packageSupport.slingSupport, serverConf.maxWaitMs, serverConf.retryWaitMs)
     }
 
     /**
@@ -56,13 +54,11 @@ class ListPackages {
     static SuccessOrFailure<Collection<RuntimePackageProperties>> listPackages(URI packageListUri, SlingSupport slingSupport,
                                                                                long maxWaitMs, long retryWaitMs) {
         HttpResponse resp
-        com.twcable.gradle.sling.SlingSupport.block(
+        block(
             maxWaitMs,
             { ![HTTP_OK, HTTP_CLIENT_TIMEOUT].contains(resp?.code) },
             {
-                resp = slingSupport.doHttp { SimpleHttpClient httpClient ->
-                    slingSupport.doGet(packageListUri, httpClient)
-                }
+                resp = slingSupport.doGet(packageListUri)
             },
             retryWaitMs
         )

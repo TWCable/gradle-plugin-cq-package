@@ -50,7 +50,8 @@ final class CqPackageTestUtils {
 
 
     static Project createSubProject(Project parentProject, String projName, boolean makeOsgi) {
-        Project project = ProjectBuilder.builder().withName(projName).withParent(parentProject).build()
+        Project project = ProjectBuilder.builder().withName(projName).withProjectDir(new File(parentProject.projectDir, projName)).withParent(parentProject).build()
+//        Project project = ProjectBuilder.builder().withName(projName).withParent(parentProject).build()
         project.version = parentProject.version
         project.apply plugin: 'java'
         if (makeOsgi) project.apply plugin: 'osgi'

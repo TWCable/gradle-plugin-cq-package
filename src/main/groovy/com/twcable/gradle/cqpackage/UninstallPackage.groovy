@@ -50,14 +50,12 @@ class UninstallPackage {
     /**
      * Iterates through all of the servers in "slingServersConfiguration" and uninstalls the given package from them.
      *
-     * @see #uninstall(String, SlingServerConfiguration, long, long)
+     * @see #uninstall(String, SlingPackageSupport)
      * @see #consumeStatus(Status, String, SlingServerConfiguration)
      */
-    static void uninstall(String packageName, SlingServersConfiguration slingServersConfiguration) {
+    static void uninstall(String packageName, SlingServersConfiguration slingServersConfiguration, SlingPackageSupportFactory factory) {
         slingServersConfiguration.each { serverConfig ->
-            long maxWaitMs = slingServersConfiguration.maxWaitValidateBundlesMs
-            long retryWaitMs = slingServersConfiguration.retryWaitMs
-            def status = uninstall(packageName, serverConfig, maxWaitMs, retryWaitMs)
+            def status = uninstall(packageName, factory.create(serverConfig))
             consumeStatus(status, packageName, serverConfig)
         }
     }
@@ -92,8 +90,8 @@ class UninstallPackage {
      * @return the {@link PackageStatus} of doing the uninstall
      */
     @Nonnull
-    static Status uninstall(String packageName, SlingServerConfiguration serverConfig, long maxWaitMs, long retryWaitMs) {
-        return CqPackageCommand.doCommand("uninstall", packageName, serverConfig, maxWaitMs, retryWaitMs, falseStatusHandler)
+    static Status uninstall(String packageName, SlingPackageSupport packageSupport) {
+        return CqPackageCommand.doCommand("uninstall", packageName, packageSupport, falseStatusHandler)
     }
 
 }
