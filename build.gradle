@@ -95,3 +95,26 @@ defaults {
 wrapper {
     gradleVersion = 2.9
 }
+
+javadoc {
+//    options.showFromPackage()
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+// Hack around Oracle's breaking changes to JDK 1.8 Javadoc tool
+if (JavaVersion.current().isJava8Compatible()) {
+    allprojects {
+        tasks.withType(Javadoc) {
+            options.addStringOption('Xdoclint:none', '-quiet')
+        }
+    }
+}
+
+groovydoc {
+    exclude { println it.file ; false }
+//    exclude "com/twcable/gradle/sling/**"
+    link("https://jsr-305.googlecode.com/svn/trunk/javadoc/", "javax.annotation")
+    link("http://docs.oracle.com/javase/8/docs/api/", 'java.')
+    link("http://docs.groovy-lang.org/latest/html/api/", 'groovy.')
+    link("https://twcable.github.io/gradle-plugin-cq-bundle/docs/groovydoc/", 'com.twcable.gradle', 'com.twcable.gradle.sling', 'com.twcable.gradle.sling.osgi')
+}
