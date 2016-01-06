@@ -67,7 +67,7 @@ class RuntimePackageProperties extends PackagePropertiesImpl {
 
 
     String getDownloadName() {
-        return getProperty('download')
+        return getProperty('downloadName')
     }
 
 
@@ -147,6 +147,12 @@ class RuntimePackageProperties extends PackagePropertiesImpl {
             return failure(NO_PACKAGE)
         }
         return success(packageProp)
+    }
+
+
+    @Override
+    public String toString() {
+        return "RuntimePackageProperties{" + propertiesMap + '}';
     }
 
 }

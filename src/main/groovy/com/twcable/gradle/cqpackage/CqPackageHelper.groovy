@@ -258,16 +258,16 @@ class CqPackageHelper {
             File downloadDir = new File("${project.buildDir}/tmp")
             downloadDir.mkdirs()
             def packageInfo = getPackageInfo(slingPackageSupport)
-            String packageFilename = packageInfo.downloadName
-            packageFilename = "${downloadDir}/${packageFilename}".replace("downloadName=", "")
+            log.info "Download filename ${packageInfo.downloadName}"
+            String packageFilename = "${downloadDir}/${packageInfo.downloadName}"
             final path = packageInfo.path
 
             def packageServerConf = slingPackageSupport.packageServerConf
-            final zipUri = URI.create("${packageServerConf.packageDownloadUri}?_charset_=utf8&${path}")
+            final zipUri = URI.create("${packageServerConf.packageDownloadUri}?_charset_=utf-8&path=${path}")
 
-            log.info("Filename from package list: $packageFilename")
-            log.info("Filepath from package list: $path")
-            log.info("Zip URI from package list: $zipUri")
+            log.info("Filename from package list: ${packageFilename}")
+            log.info("Filepath from package list: ${path}")
+            log.info("Zip URI from package list: ${zipUri}")
 
             def file = downloadFile(packageFilename, zipUri, packageServerConf.serverConf)
             def zipFile = new ZipFile(file)
