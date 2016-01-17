@@ -52,7 +52,6 @@ import static com.twcable.gradle.GradleUtils.extension
  *  <tr><td>installRemoteTask</td><td>Installs a specified CQ Package to a remote environment</td></tr>
  *  <tr><td>verifyBundles</td><td>Checks all the JARs that are included in the package to make sure they are OSGi compliant, and gives a report of any that are not. Never causes the build to fail.</td></tr>
  *  <tr><td>addBundlesToFilterXml</td><td>Adds the bundles to the filter.xml</td></tr>
- *  <tr><td>checkBundleStatus</td><td>Check Bundle Status</td></tr>
  *  <tr><td>startInactiveBundles</td><td>Asynchronously attempts to start any bundle in RESOLVED state.</td></tr>
  * </table>
  *
