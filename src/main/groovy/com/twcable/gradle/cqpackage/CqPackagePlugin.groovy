@@ -16,8 +16,6 @@
 package com.twcable.gradle.cqpackage
 
 import com.twcable.gradle.sling.SlingServersConfiguration
-import com.twcable.gradle.sling.osgi.BundleAndServers
-import com.twcable.gradle.sling.osgi.SlingBundleConfiguration
 import groovy.transform.TypeChecked
 import groovy.util.logging.Slf4j
 import org.gradle.api.DefaultTask
@@ -54,7 +52,6 @@ import static com.twcable.gradle.GradleUtils.extension
  *  <tr><td>installRemoteTask</td><td>Installs a specified CQ Package to a remote environment</td></tr>
  *  <tr><td>verifyBundles</td><td>Checks all the JARs that are included in the package to make sure they are OSGi compliant, and gives a report of any that are not. Never causes the build to fail.</td></tr>
  *  <tr><td>addBundlesToFilterXml</td><td>Adds the bundles to the filter.xml</td></tr>
- *  <tr><td>checkBundleStatus</td><td>Check Bundle Status</td></tr>
  *  <tr><td>startInactiveBundles</td><td>Asynchronously attempts to start any bundle in RESOLVED state.</td></tr>
  * </table>
  *
@@ -83,7 +80,6 @@ class CqPackagePlugin implements Plugin<Project> {
         addDepConfiguration(project)
 
         extension(project, CqPackageHelper, project)
-        extension(project, SlingBundleConfiguration, project)
         extension(project, SlingServersConfiguration, project)
 
         addTasks(project)
@@ -135,7 +131,6 @@ class CqPackagePlugin implements Plugin<Project> {
 
         validateRemoteBundles(project)
 
-        checkBundleStatus(project)
         startInactiveBundles(project)
         install(project)
         installRemote(project)
@@ -149,7 +144,7 @@ class CqPackagePlugin implements Plugin<Project> {
         project.tasks.create('installRemote').configure { Task task ->
             task.description = "Sequence of tasks to install CQ Package to a remote environment"
             task.group = 'CQ'
-            task.dependsOn 'uninstall', 'checkBundleStatus', 'remove', 'installRemoteTask'
+            task.dependsOn 'uninstall', 'remove', 'installRemoteTask'
         }
     }
 
@@ -248,32 +243,6 @@ class CqPackagePlugin implements Plugin<Project> {
     }
 
 
-    Task checkBundleStatus(Project project) {
-        Task task = project.task([
-            description: "Check Bundle Status",
-            group      : 'CQ'
-        ], 'checkBundleStatus')
-
-        task.doLast {
-            if (project.hasProperty('group')) {
-                String groupProperty = project.property('group')
-                getCqPackageHelper(project).checkActiveBundles(groupProperty)
-            }
-            else {
-                project.logger.error "Group property is not defined on the project"
-            }
-        }
-
-        project.gradle.taskGraph.whenReady {
-            if (hasProperty(project, 'skipStatusCheck')) {
-                task.setEnabled(false)
-            }
-        }
-
-        return task
-    }
-
-
     public Task reinstall(Project project) {
         Task reinstallTask = project.task([
             description: "Reinstalls (removes then uploads and installs a fresh copy) the CQ Package",
@@ -292,7 +261,7 @@ class CqPackagePlugin implements Plugin<Project> {
             group      : 'CQ'
         ], 'install')
 
-        installTask.dependsOn 'uninstall', 'remove', 'upload', 'installPackage', 'checkBundleStatus'
+        installTask.dependsOn 'uninstall', 'remove', 'upload', 'installPackage'
 
         return installTask
     }
@@ -309,7 +278,7 @@ class CqPackagePlugin implements Plugin<Project> {
             getCqPackageHelper(project).deletePackage(SimpleSlingPackageSupportFactory.INSTANCE)
         }
 
-        removeTask.mustRunAfter 'checkBundleStatus', 'uninstall'
+        removeTask.mustRunAfter 'uninstall'
 
         return removeTask
     }
@@ -347,13 +316,7 @@ class CqPackagePlugin implements Plugin<Project> {
         ], 'uninstallBundles')
 
         task.doLast {
-            // Default to uninstalling bundles where the symbolic
-            // name match this project's group name
-            def uninstallBundlesPredicate = { String symbolicName ->
-                symbolicName?.contains(project.group as CharSequence)
-            } as BundleAndServers.UninstallBundlePredicate
-
-            getCqPackageHelper(project).uninstallBundles(uninstallBundlesPredicate)
+            getCqPackageHelper(project).uninstallBundles({ true })
         }
         return task
     }
@@ -391,11 +354,6 @@ class CqPackagePlugin implements Plugin<Project> {
 
     public static Configuration cqPackageDependencies(Project project) {
         return project.configurations.getByName(CQ_PACKAGE)
-    }
-
-
-    static boolean hasProperty(Project project, String propName) {
-        return project.extensions.findByName(propName) != null
     }
 
 }

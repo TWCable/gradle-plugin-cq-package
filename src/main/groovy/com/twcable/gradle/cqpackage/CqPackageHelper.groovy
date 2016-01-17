@@ -15,15 +15,20 @@
  */
 package com.twcable.gradle.cqpackage
 
+import com.twcable.gradle.http.HttpResponse
+import com.twcable.gradle.sling.SimpleSlingSupportFactory
 import com.twcable.gradle.sling.SlingServerConfiguration
 import com.twcable.gradle.sling.SlingServersConfiguration
-import com.twcable.gradle.sling.osgi.BundleAndServers
+import com.twcable.gradle.sling.SlingSupport
+import com.twcable.gradle.sling.SlingSupportFactory
+import com.twcable.gradle.sling.osgi.BundleServerConfiguration
 import com.twcable.gradle.sling.osgi.SlingBundleConfiguration
 import com.twcable.gradle.sling.osgi.SlingBundleSupport
+import groovy.json.JsonSlurper
 import groovy.transform.CompileStatic
+import groovy.transform.TypeChecked
 import groovy.util.logging.Slf4j
 import org.apache.commons.io.IOUtils
-import org.apache.http.HttpResponse
 import org.apache.http.auth.UsernamePasswordCredentials
 import org.apache.http.client.HttpClient
 import org.apache.http.client.methods.HttpGet
@@ -35,7 +40,7 @@ import org.apache.jackrabbit.vault.packaging.PackageProperties
 import org.apache.jackrabbit.vault.packaging.impl.PackageManagerImpl
 import org.gradle.api.GradleException
 import org.gradle.api.Project
-import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.Configuration as GradleClasspathConfiguration
 import org.gradle.api.artifacts.ResolvedConfiguration
 
 import javax.annotation.Nonnull
@@ -45,6 +50,18 @@ import java.util.jar.Manifest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipException
 import java.util.zip.ZipFile
+
+import static com.twcable.gradle.sling.SlingSupport.block
+import static com.twcable.gradle.sling.osgi.BundleState.ACTIVE
+import static com.twcable.gradle.sling.osgi.BundleState.FRAGMENT
+import static com.twcable.gradle.sling.osgi.BundleState.INSTALLED
+import static com.twcable.gradle.sling.osgi.BundleState.MISSING
+import static com.twcable.gradle.sling.osgi.BundleState.RESOLVED
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_CLIENT_TIMEOUT
+import static java.net.HttpURLConnection.HTTP_INTERNAL_ERROR
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
+import static java.net.HttpURLConnection.HTTP_OK
 
 /**
  * Has external dependencies on {@link SlingServersConfiguration}
@@ -67,23 +84,17 @@ class CqPackageHelper {
     }
 
 
-    @Deprecated
-    private SlingBundleConfiguration slingBundleConfiguration() {
-        return project.extensions.getByType(SlingBundleConfiguration)
-    }
-
-
-    @Deprecated
     private SlingServersConfiguration slingServersConfiguration() {
         project.extensions.getByType(SlingServersConfiguration)
     }
 
     /**
-     * Returns the name of the project, which is used as the name of the package.
+     * Returns the package name. Uses the project's name.
      */
-    @Deprecated
+    // TODO disentangle project name from package name
+    // https://github.com/TWCable/gradle-plugin-cq-package/issues/8
     String getPackageName() {
-        project.name
+        return project.name
     }
 
 
@@ -145,16 +156,28 @@ class CqPackageHelper {
         return packageInfoSF.value
     }
 
-
-    void uploadPackage(@Nonnull SlingPackageSupportFactory factory) {
+    /**
+     * Uploads the Package for the current Project to all the servers.
+     *
+     * @param factory strategy for creating SlingPackageSupport instances
+     * @return the "aggregated" status: {@link Status#OK}, {@link PackageStatus#UNRESOLVED_DEPENDENCIES} or {@link PackageStatus#NO_PACKAGE}
+     */
+    @Nonnull
+    Status uploadPackage(@Nonnull SlingPackageSupportFactory factory) {
         if (factory == null) throw new IllegalArgumentException("factory == null")
         File sourceFile = UploadPackage.getThePackageFile(project)
 
         final slingServersConfiguration = slingServersConfiguration()
 
-        slingServersConfiguration.each { SlingServerConfiguration serverConfig ->
-            UploadPackage.upload(sourceFile, false, factory.create(serverConfig), packageManager)
+        def status = PackageStatus.OK
+        def serversIter = slingServersConfiguration.iterator()
+        while (serversIter.hasNext() && status == Status.OK) {
+            SlingServerConfiguration serverConfig = serversIter.next()
+            def uploadStatus = UploadPackage.upload(sourceFile, false, factory.create(serverConfig), packageManager)
+            if (uploadStatus == PackageStatus.UNRESOLVED_DEPENDENCIES || PackageStatus.NO_PACKAGE) status = uploadStatus
         }
+
+        return status
     }
 
     /**
@@ -192,72 +215,382 @@ class CqPackageHelper {
         return packageId(packageFile).name
     }
 
-
-    BundleAndServers getBundleAndServers() {
-        def slingBundleConfiguration = slingBundleConfiguration()
-        def slingServersConfiguration = slingServersConfiguration()
-        return new BundleAndServers(slingBundleConfiguration, slingServersConfiguration)
-    }
-
-
-    void checkActiveBundles(String groupProperty) {
-        bundleAndServers.doAcrossServers(false) { SlingBundleSupport slingBundleSupport ->
-            bundleAndServers.checkActiveBundles(groupProperty, slingBundleSupport)
+    /**
+     * Calls {@link CqPackageHelper#startInactiveBundles(SlingSupport)} for
+     * each server in {@link SlingServersConfiguration}
+     *
+     * @return the "aggregate" HTTP response: if all the calls are in the >= 200 and <400 range, or
+     * a 408 (timeout, server not running) the returns an empty HTTP_OK; otherwise returns the first error response
+     * it came across
+     */
+    HttpResponse startInactiveBundles() {
+        return doAcrossServers(false) { SlingSupport slingSupport ->
+            return startInactiveBundles(slingSupport)
         }
     }
 
     /**
-     * Calls {@link BundleAndServers#startInactiveBundles(SlingBundleSupport)} for
-     * each server in {@link SlingServersConfiguration}
+     * Runs the given server action across all the active servers
+     *
+     * @param missingIsOk is a 404 response considered OK? If false, it counts as an error
+     * @param serverAction the action to run against the bundle on the server
+     *
+     * @return the "aggregate" HTTP response: if all the calls are in the >= 200 and <400 range, or
+     * a 408 (timeout, server not running) the returns an empty HTTP_OK; otherwise returns the first error response
+     * it came across
      */
-    void startInactiveBundles() {
-        bundleAndServers.doAcrossServers(false) { SlingBundleSupport slingBundleSupport ->
-            bundleAndServers.startInactiveBundles(slingBundleSupport)
-        }
+    @Nonnull
+    private HttpResponse doAcrossServers(boolean missingIsOk,
+                                         ServerAction serverAction) {
+        return doAcrossServers(slingServersConfiguration(), missingIsOk, serverAction)
     }
 
+    /**
+     * Runs the given server action across all the provided active servers
+     *
+     * @param servers the collection of servers to run the action across
+     * @param missingIsOk is a 404 response considered OK? If false, it counts as an error
+     * @param serverAction the action to run against the bundle on the server
+     *
+     * @return the "aggregate" HTTP response: if all the calls are in the >= 200 and <400 range, or
+     * a 408 (timeout, server not running) the returns an empty HTTP_OK; otherwise returns the first error response
+     * it came across
+     */
+    @Nonnull
+    private static HttpResponse doAcrossServers(SlingServersConfiguration servers,
+                                                boolean missingIsOk,
+                                                ServerAction serverAction) {
+        return doAcrossServers(servers, SimpleSlingSupportFactory.INSTANCE, missingIsOk, serverAction)
+    }
 
-    void validateBundles(Configuration configuration) {
+    /**
+     * Runs the given server action across all the provided active servers
+     *
+     * @param servers the collection of servers to run the action across
+     * @param slingSupportFactory the factory for creating the connection helper
+     * @param missingIsOk is a 404 response considered OK? If false, it counts as an error
+     * @param serverAction the action to run against the bundle on the server
+     *
+     * @return the "aggregate" HTTP response: if all the calls are in the >= 200 and <400 range, or
+     * a 408 (timeout, server not running) the returns an empty HTTP_OK; otherwise returns the first error response
+     * it came across
+     */
+    @Nonnull
+    private static HttpResponse doAcrossServers(SlingServersConfiguration servers,
+                                                SlingSupportFactory slingSupportFactory,
+                                                boolean missingIsOk,
+                                                ServerAction serverAction) {
+        def httpResponse = new HttpResponse(HTTP_OK, '')
+
+        Iterator<SlingServerConfiguration> activeServers = servers.iterator()
+        while (activeServers.hasNext() && !isBadResponse(httpResponse.code, missingIsOk)) {
+            def serverConfig = activeServers.next()
+            def slingSupport = slingSupportFactory.create(serverConfig)
+            def resp = serverAction.run(slingSupport)
+
+            httpResponse = and(httpResponse, resp, missingIsOk)
+        }
+        return httpResponse
+    }
+
+    /**
+     * Does the given http code indicate there was an error?
+     * <p>
+     * Good codes are 200 - 399. However, 408 (client timeout) is also not considered to be an error.
+     *
+     * @param respCode the code to check if it indicates an error or not
+     * @param missingIsOk is a 404 (missing) acceptable?
+     */
+    static boolean isBadResponse(int respCode, boolean missingIsOk) {
+        if (respCode == HTTP_NOT_FOUND) return !missingIsOk
+        if (respCode >= HTTP_OK) {
+            if (respCode < HTTP_BAD_REQUEST) return false
+            if (respCode == HTTP_CLIENT_TIMEOUT) return false
+            return true
+        }
+
+        return true
+    }
+
+    /**
+     * For the server pointed to by "slingSupport" this asks the server for all of its bundles. For every bundle that
+     * is RESOLVED, this will call "start" on it.
+     *
+     * @return the "aggregate" HTTP response: if all the calls are in the >= 200 and <400 range, or
+     * a 408 (timeout, server not running) the returns an empty HTTP_OK; otherwise returns the first error response
+     * it came across
+     */
+    @Nonnull
+    HttpResponse startInactiveBundles(@Nonnull SlingSupport slingSupport) {
+        def serverConf = slingSupport.serverConf
+        def resp = slingSupport.doGet(getBundlesControlUri(serverConf))
+        def bundleServerConfiguration = new BundleServerConfiguration(serverConf)
+
+        if (resp.code == HTTP_OK) {
+            Map json = new JsonSlurper().parseText(resp.body) as Map
+            List<Map> data = json.data as List
+
+            def inactiveBundles = data.
+                findAll { it.state == RESOLVED.stateString }.
+                collect { it.symbolicName } as List<String>
+
+            def httpResponse = new HttpResponse(HTTP_OK, '')
+            def inactiveBundlesIter = inactiveBundles.iterator()
+            while (inactiveBundlesIter.hasNext() && !isBadResponse(httpResponse.code, false)) {
+                String symbolicName = inactiveBundlesIter.next()
+                def bundleConfiguration = new SlingBundleConfiguration(symbolicName, "")
+                def slingBundleSupport = new SlingBundleSupport(bundleConfiguration, bundleServerConfiguration, slingSupport)
+                log.info "Trying to start inactive bundle: ${symbolicName}"
+                def startResp = slingBundleSupport.startBundle()
+                httpResponse = and(httpResponse, startResp, false)
+            }
+            return httpResponse
+        }
+        return resp
+    }
+
+    /**
+     * Returns the URL to use to do actions on bundles.
+     */
+    @Nonnull
+    static URI getBundlesControlUri(SlingServerConfiguration serverConf) {
+        URI base = serverConf.baseUri
+        new URI(base.scheme, base.userInfo, base.host, base.port, "${BundleServerConfiguration.BUNDLE_CONTROL_BASE_PATH}.json", null, null)
+    }
+
+    /**
+     * Calls {@link CqPackageHelper#validateAllBundles(List, SlingSupport)} for
+     * each server in {@link SlingServersConfiguration} and all the bundles in the configuration
+     *
+     * @param configuration the Gradle Configuration such as "compile" to retrieve the list of bundles from
+     *
+     * @return HTTP_INTERNAL_ERROR if there are inactive bundles, otherwise the "aggregate" HTTP response: if all
+     * the calls are in the >= 200 and <400 range, or a 408 (timeout, server not running) the returns an empty HTTP_OK;
+     * otherwise returns the first error response it came across
+     */
+    HttpResponse validateBundles(GradleClasspathConfiguration configuration) {
         def resolvedConfiguration = configuration.resolvedConfiguration
         def symbolicNamesList = buildSymbolicNamesList(resolvedConfiguration)
-        bundleAndServers.doAcrossServers(false) { SlingBundleSupport slingBundleSupport ->
-            bundleAndServers.validateAllBundles(symbolicNamesList, slingBundleSupport)
+        return doAcrossServers(false) { SlingSupport slingSupport ->
+            return validateAllBundles(symbolicNamesList, slingSupport)
         }
     }
 
-
-    void validateRemoteBundles() {
-        bundleAndServers.doAcrossServers(false) { SlingBundleSupport slingBundleSupport ->
-            def packageServerConf = new PackageServerConfiguration(slingBundleSupport.serverConf)
-            def packageSupport = new SlingPackageSupport(packageServerConf, slingBundleSupport.slingSupport)
+    /**
+     * Calls {@link CqPackageHelper#validateAllBundles(List, SlingSupport)} for
+     * each server in {@link SlingServersConfiguration} and all the bundles in the package file downloaded from
+     * that server
+     *
+     * @return HTTP_INTERNAL_ERROR if there are inactive bundles, otherwise the "aggregate" HTTP response: if all
+     * the calls are in the >= 200 and <400 range, or a 408 (timeout, server not running) the returns an empty HTTP_OK;
+     * otherwise returns the first error response it came across
+     */
+    HttpResponse validateRemoteBundles() {
+        return doAcrossServers(false) { SlingSupport slingSupport ->
+            def packageServerConf = new PackageServerConfiguration(slingSupport.serverConf)
+            def packageSupport = new SlingPackageSupport(packageServerConf, slingSupport)
             def namesFromDownloadedPackage = symbolicNamesFromDownloadedPackage(packageSupport)
-            bundleAndServers.validateAllBundles(namesFromDownloadedPackage, slingBundleSupport)
+            return validateAllBundles(namesFromDownloadedPackage, slingSupport)
+        }
+    }
+
+    /**
+     * Calls each server in {@link SlingServersConfiguration} and all the bundles in 'symbolicNames' to verify that
+     * they are not in non-ACTIVE states. If there are, it returns HTTP_INTERNAL_ERROR (500).
+     *
+     * @param configuration the Gradle Configuration such as "compile" to retrieve the list of bundles from
+     *
+     * @return HTTP_INTERNAL_ERROR if there are inactive bundles, otherwise the "aggregate" HTTP response: if all
+     * the calls are in the >= 200 and <400 range, or a 408 (timeout, server not running) the returns an
+     * empty HTTP_OK; otherwise returns the first error response it came across
+     */
+    @Nonnull
+    @SuppressWarnings("GroovyPointlessBoolean")
+    HttpResponse validateAllBundles(@Nonnull List<String> symbolicNames, @Nonnull SlingSupport slingSupport) {
+        def serverConf = slingSupport.serverConf
+        def serverName = serverConf.name
+        log.info "Checking for NON-ACTIVE bundles on ${serverName}"
+
+        final pollingTxt = new DotPrinter()
+        boolean bundlesActive = false
+
+        HttpResponse theResp = new HttpResponse(HTTP_OK, "")
+
+        block(
+            serverConf.maxWaitMs,
+            { serverConf.active && bundlesActive == false && theResp.code == HTTP_OK },
+            {
+                log.info pollingTxt.increment()
+
+                def resp = slingSupport.doGet(getBundlesControlUri(serverConf))
+                if (resp.code == HTTP_OK) {
+                    try {
+                        def json = new JsonSlurper().parseText(resp.body) as Map
+                        List<Map<String, Object>> data = json.data as List
+
+                        def knownBundles = data.findAll { Map b -> symbolicNames.contains(b.symbolicName) }
+                        def knownBundleNames = knownBundles.collect { Map b -> (String)b.symbolicName }
+                        def missingBundleNames = (symbolicNames - knownBundleNames)
+                        def missingBundles = missingBundleNames.collect { String name ->
+                            [symbolicName: name, state: MISSING.stateString] as Map<String, Object>
+                        }
+                        def allBundles = knownBundles + missingBundles
+
+                        if (!hasAnInactiveBundle(allBundles)) {
+                            if (log.debugEnabled) allBundles.each { Map b -> log.debug "Active bundle: ${b.symbolicName}" }
+                            bundlesActive = true
+                        }
+                    }
+                    catch (Exception exp) {
+                        throw new GradleException("Problem parsing \"${resp.body}\"", exp)
+                    }
+                }
+                else {
+                    if (resp.code == HTTP_CLIENT_TIMEOUT)
+                        serverConf.active = false
+                    theResp = resp
+                }
+            },
+            serverConf.retryWaitMs
+        )
+
+        if (serverConf.active == false) return new HttpResponse(HTTP_CLIENT_TIMEOUT, serverName)
+
+        if (theResp.code != HTTP_OK) return theResp
+
+        if (bundlesActive == false)
+            return new HttpResponse(HTTP_INTERNAL_ERROR, "Not all bundles for ${symbolicNames} are ACTIVE on ${serverName}")
+        else {
+            log.info("Bundles are ACTIVE on ${serverName}")
+            return theResp
         }
     }
 
 
-    void uninstallBundles(BundleAndServers.UninstallBundlePredicate bundlePredicate) {
-        bundleAndServers.doAcrossServers(true) { SlingBundleSupport slingBundleSupport ->
-            def serverConf = slingBundleSupport.serverConf
+    private boolean hasAnInactiveBundle(final Collection<Map<String, Object>> knownBundles) {
+        final activeBundles = knownBundles.findAll { bundle ->
+            bundle.state == ACTIVE.stateString ||
+                bundle.state == FRAGMENT.stateString
+        } as Collection<Map>
+
+        final inactiveBundles = inactiveBundles(knownBundles)
+
+        if (log.infoEnabled) inactiveBundles.each { log.info("bundle ${it.symbolicName} NOT active: ${it.state}") }
+        if (log.debugEnabled) activeBundles.each { log.debug("bundle ${it.symbolicName} IS active") }
+
+        return inactiveBundles.size() > 0
+    }
+
+    /**
+     * Calls {@link CqPackageHelper#uninstallAllBundles(List, SlingSupport, UninstallBundlePredicate)} for
+     * each server in {@link SlingServersConfiguration} and all the bundles in the package file downloaded from
+     * that server
+     *
+     * @return the "aggregate" HTTP response: if all the calls are in the >= 200 and <400 range, or a
+     * 404 (not installed) or a 408 (timeout, server not running) the returns an empty HTTP_OK;
+     * otherwise returns the first error response it came across
+     */
+    HttpResponse uninstallBundles(UninstallBundlePredicate bundlePredicate) {
+        return doAcrossServers(true) { SlingSupport slingSupport ->
+            def serverConf = slingSupport.serverConf
             def packageServerConfiguration = new PackageServerConfiguration(serverConf)
-            def slingPackageSupport = new SlingPackageSupport(packageServerConfiguration, slingBundleSupport.slingSupport)
-            def packageInfo = getPackageInfo(slingPackageSupport)
-            if (packageInfo != null) { // package is installed
+            def slingPackageSupport = new SlingPackageSupport(packageServerConfiguration, slingSupport)
+            def packageInfo = RuntimePackageProperties.packageProperties(slingPackageSupport, packageName)
+            if (packageInfo.succeeded()) { // package is installed
                 def namesFromDownloadedPackage = symbolicNamesFromDownloadedPackage(slingPackageSupport)
-                bundleAndServers.uninstallAllBundles(namesFromDownloadedPackage, slingBundleSupport, bundlePredicate)
+                return uninstallAllBundles(namesFromDownloadedPackage, slingSupport, bundlePredicate)
             }
             else {
                 log.info("${packageName} is not on ${serverConf.name}")
+                return new HttpResponse(HTTP_OK, '')
             }
         }
     }
 
+    /**
+     * Given a list of symbolic names on a server, uninstalls them if they match the predicate
+     *
+     * @param symbolicNames the symbolic names on a server to check against
+     * @param slingSupport the SlingSupport for a particular server
+     * @param predicate the predicate determine if the bundle should be uninstalled
+     *
+     * @return the "aggregate" HTTP response: if all the calls are in the >= 200 and <400 range, or a
+     * 404 (not installed) or a 408 (timeout, server not running) the returns an empty HTTP_OK;
+     * otherwise returns the first error response it came across
+     */
+    @Nonnull
+    HttpResponse uninstallAllBundles(@Nonnull List<String> symbolicNames,
+                                     @Nonnull SlingSupport slingSupport,
+                                     @Nullable UninstallBundlePredicate predicate) {
+        log.info "Uninstalling/removing bundles on ${slingSupport.serverConf.name}: ${symbolicNames}"
 
-    List<String> symbolicNamesFromDownloadedPackage(SlingPackageSupport slingPackageSupport) {
+        def httpResponse = new HttpResponse(HTTP_OK, '')
+        Iterator<String> symbolicNameIter = symbolicNames.iterator()
+
+        while (symbolicNameIter.hasNext() && !isBadResponse(httpResponse.code, true)) {
+            def symbolicName = symbolicNameIter.next()
+            def bundleConfiguration = new SlingBundleConfiguration(symbolicName, "")
+            def slingBundleSupport = new SlingBundleSupport(bundleConfiguration, new BundleServerConfiguration(slingSupport.serverConf), slingSupport)
+            if (predicate != null && predicate.eval(symbolicName)) {
+                log.info "Stopping $symbolicName on ${slingSupport.serverConf.name}"
+                def stopResp = slingBundleSupport.stopBundle()
+                httpResponse = and(httpResponse, stopResp, true)
+                if (!isBadResponse(httpResponse.code, true)) {
+                    log.info "Uninstalling $symbolicName on ${slingSupport.serverConf.name}"
+                    def uninstallResp = slingBundleSupport.uninstallBundle()
+                    httpResponse = and(httpResponse, uninstallResp, true)
+                }
+            }
+        }
+
+        return httpResponse
+    }
+
+    // TODO: Move to be in HttpResponse
+    static HttpResponse and(HttpResponse first, HttpResponse second, boolean missingIsOk) {
+        if (first == null && second == null) return new HttpResponse(HTTP_OK, '')
+        if (first == null) {
+            return second
+        }
+        else if (second == null) {
+            return first
+        }
+
+        // TIMEOUT is effectively a "not set"
+        if (first.code == HTTP_CLIENT_TIMEOUT) return second
+
+        // once first is not OK, everything from that point is not OK
+        if (isBadResponse(first.code, missingIsOk)) return first
+
+        // TIMEOUT is effectively a "not set"
+        if (second.code == HTTP_CLIENT_TIMEOUT) return first
+
+        return second
+    }
+
+
+    private static Collection<Map> inactiveBundles(Collection<Map> knownBundles) {
+        return knownBundles.findAll { bundle ->
+            bundle.state == INSTALLED.stateString ||
+                bundle.state == RESOLVED.stateString ||
+                bundle.state == MISSING.stateString
+        } as Collection<Map>
+    }
+
+    /**
+     * Downloads this package from the server contained in "slingPackageSupport", then extracts the bundles it contains
+     * and returns the list of symbolic names for those bundles
+     *
+     * @param slingPackageSupport the package/server combination to get the package file from
+     */
+    @Nonnull
+    private List<String> symbolicNamesFromDownloadedPackage(SlingPackageSupport slingPackageSupport) {
         try {
             File downloadDir = new File("${project.buildDir}/tmp")
             downloadDir.mkdirs()
-            def packageInfo = getPackageInfo(slingPackageSupport)
+            def packageInfoSF = RuntimePackageProperties.packageProperties(slingPackageSupport, packageName)
+            if (packageInfoSF.failed()) throw new IllegalStateException("Could not get package information: ${packageInfoSF.error}")
+            def packageInfo = packageInfoSF.value
             log.info "Download filename ${packageInfo.downloadName}"
             String packageFilename = "${downloadDir}/${packageInfo.downloadName}"
             final path = packageInfo.path
@@ -320,7 +653,7 @@ class CqPackageHelper {
             new UsernamePasswordCredentials(serverConfig.username, serverConfig.password), "UTF-8", false))
 
         HttpClient client = new DefaultHttpClient()
-        HttpResponse httpResponse = client.execute(httpGet)
+        org.apache.http.HttpResponse httpResponse = client.execute(httpGet)
         InputStream is = httpResponse.entity.content
         File file = new File(filename)
         OutputStream out = new FileOutputStream(file)
@@ -369,6 +702,38 @@ class CqPackageHelper {
      */
     static boolean isOsgiFile(File file) {
         return getSymbolicName(file) != null
+    }
+
+    // **********************************************************************
+    //
+    // HELPER CLASSES
+    //
+    // **********************************************************************
+
+
+    @TypeChecked
+    public interface ServerAction {
+        HttpResponse run(@Nonnull SlingSupport slingSupport);
+    }
+
+    /**
+     * Functional interface for {@link #uninstallAllBundles(List, SlingSupport, UninstallBundlePredicate)}
+     */
+    static interface UninstallBundlePredicate {
+        /**
+         * Returns true if the symbolic name passed in should be uninstalled; otherwise false
+         */
+        boolean eval(String symbolicName)
+    }
+
+    @TypeChecked
+    static class DotPrinter {
+        private final StringBuilder str = new StringBuilder()
+
+
+        String increment() {
+            str.append('.' as char).toString()
+        }
     }
 
 }

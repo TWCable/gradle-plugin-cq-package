@@ -68,7 +68,7 @@ class CqPackagePluginSpec extends PluginProjectSpec {
         where:
         taskName         | mustRunAfterTaskNames
         'uninstall'      | ['createPackage']
-        'remove'         | ['checkBundleStatus', 'uninstall']
+        'remove'         | ['uninstall']
         'uploadRemote'   | ['remove']
         'installRemote'  | []
         'upload'         | ['remove']
