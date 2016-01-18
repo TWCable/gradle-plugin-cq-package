@@ -17,7 +17,6 @@ package com.twcable.gradle.cqpackage
 
 import com.twcable.gradle.sling.SlingServerConfiguration
 import com.twcable.gradle.sling.SlingServersConfiguration
-import com.twcable.gradle.sling.SlingSupportFactory
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import org.apache.http.entity.mime.content.FileBody
@@ -174,8 +173,13 @@ in other words, there's no indication it's missing its dependency at this point
         }
 
         def file = CreatePackageTask.from(project).archivePath
-        log.info("No remote package passed in. Using createPackage zip: ${file}")
-        return file
+        if (file.exists()) {
+            log.info("No remote package passed in. Using createPackage zip: ${file}")
+            return file
+        }
+
+        // TODO Detect this situation at task-graph build time and automatically add the createPackage task
+        throw new IllegalStateException("The 'package' system property is not set and there is no output from the 'createPackage' task")
     }
 
 }

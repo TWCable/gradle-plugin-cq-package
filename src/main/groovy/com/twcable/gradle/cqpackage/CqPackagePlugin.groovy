@@ -224,8 +224,8 @@ class CqPackagePlugin implements Plugin<Project> {
             getCqPackageHelper(project).uploadPackage(SimpleSlingPackageSupportFactory.INSTANCE)
         }
 
-        task.dependsOn 'createPackage'
-        task.mustRunAfter 'remove'
+        task.dependsOn 'remove'
+        task.mustRunAfter 'createPackage', 'uninstall'
 
         return task
     }

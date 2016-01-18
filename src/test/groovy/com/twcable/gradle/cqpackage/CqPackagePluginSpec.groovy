@@ -71,7 +71,7 @@ class CqPackagePluginSpec extends PluginProjectSpec {
         'remove'         | ['uninstall']
         'uploadRemote'   | ['remove']
         'installRemote'  | []
-        'upload'         | ['remove']
+        'upload'         | ['uninstall', 'createPackage']
         'installPackage' | ['upload']
     }
 
