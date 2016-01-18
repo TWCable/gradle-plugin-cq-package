@@ -267,7 +267,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
 
         when:
         // 'createPackage' being last in this list verifies the 'mustRunAfter' relationship
-        result = runTasks("upload", "createPackage", "-x", "remove")
+        result = runTasks("uploadPackage", "createPackage", "-x", "removePackage")
 
         then:
         result.success
@@ -282,12 +282,12 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         writeSimpleBuildFile()
 
         when:
-        result = runTasks("upload", "-x", "remove")
+        result = runTasks("uploadPackage", "-x", "removePackage")
 
         then:
         !result.success
         def exp = result.failure.cause
-        exp.task.name == 'upload'
+        exp.task.name == 'uploadPackage'
         exp.cause.message.contains("there is no output from the 'createPackage' task")
     }
 
@@ -309,7 +309,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         writeSimpleBuildFile()
 
         when:
-        result = runTasks("upload", "-x", "remove")
+        result = runTasks("uploadPackage", "-x", "removePackage")
 
         then:
         result.success
@@ -349,7 +349,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         writeSimpleBuildFile()
 
         when:
-        result = runTasks("remove")
+        result = runTasks("removePackage")
 
         then:
         result.success
@@ -362,7 +362,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         writeSimpleBuildFile()
 
         when:
-        result = runTasks("remove")
+        result = runTasks("removePackage")
 
         then:
         result.success
@@ -381,7 +381,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         writeSimpleBuildFile()
 
         when:
-        result = runTasks("uninstall")
+        result = runTasks("uninstallPackage")
 
         then:
         result.success
