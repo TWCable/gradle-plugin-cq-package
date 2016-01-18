@@ -67,10 +67,6 @@ class CreatePackageTask extends Zip {
         setDescription("Creates the CQ Package zip file")
         setGroup("CQ")
 
-        // don't know why this isn't being set automatically, but...
-        setBaseName(project.name)
-        setVersion(project.version as String)
-
         fileExclusions = [
             '**/.git',
             '**/.git/**',

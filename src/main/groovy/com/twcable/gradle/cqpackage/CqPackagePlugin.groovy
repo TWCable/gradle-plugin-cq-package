@@ -25,6 +25,7 @@ import org.gradle.api.Task
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.internal.TaskInternal
 import org.gradle.api.internal.tasks.execution.TaskValidator
+import org.gradle.api.plugins.BasePlugin
 
 import static com.twcable.gradle.GradleUtils.extension
 
@@ -40,7 +41,6 @@ import static com.twcable.gradle.GradleUtils.extension
  *  <tr><td>createPackage</td><td>Creates the CQ Package zip file.</td></tr>
  *  <tr><td>install</td><td>Issues the command to CQ to install the uploaded package.</td></tr>
  *  <tr><td>uninstall</td><td>Uninstalls the CQ Package. If the package is not on the server, nothing happens. (i.e., This does not fail if the package is not on the server.)</td></tr>
- *  <tr><td>reinstall</td><td>Reinstalls (removes then uploads and installs a fresh copy) the CQ Package. (Depends on `clean`, `uninstall`, `remove`, `install`, `verifyBundles`)</td></tr>
  *  <tr><td>installPackage</td><td>Installs the CQ Package</td></tr>
  *  <tr><td>validateBundles</td><td>Checks all the JARs that are included in the package to make sure they are installed and in an ACTIVE state and gives a report of any that are not. This task polls in the case the bundles are newly installed.</td></tr>
  *  <tr><td>installRemote</td><td>Issues the command to CQ to install the uploaded package to a remote server defined by -Denvironment, -DenvJson, and -Dpackage.</td></tr>
@@ -77,6 +77,8 @@ class CqPackagePlugin implements Plugin<Project> {
     void apply(Project project) {
         log.info("Applying ${this.class.name} to ${project}")
 
+        project.plugins.apply(BasePlugin)
+
         addDepConfiguration(project)
 
         extension(project, CqPackageHelper, project)
@@ -93,6 +95,7 @@ class CqPackagePlugin implements Plugin<Project> {
         def cqPackageConf = project.configurations.create CQ_PACKAGE
 
         // attach to "runtime", but don't insist that it have to be there first (or will ever be there)
+        // TODO: Implement with .withType instead of explicit watchers
         def runtimeConf = project.configurations.findByName("runtime")
         if (runtimeConf == null) {
             project.configurations.whenObjectAdded {
@@ -134,7 +137,6 @@ class CqPackagePlugin implements Plugin<Project> {
         startInactiveBundles(project)
         install(project)
         installRemote(project)
-        reinstall(project)
         project.logger.debug "Finished adding tasks for ${this.class.name} to ${project}"
     }
 
@@ -240,18 +242,6 @@ class CqPackagePlugin implements Plugin<Project> {
         }
 
         return task
-    }
-
-
-    public Task reinstall(Project project) {
-        Task reinstallTask = project.task([
-            description: "Reinstalls (removes then uploads and installs a fresh copy) the CQ Package",
-            group      : 'CQ'
-        ], 'reinstall')
-
-        reinstallTask.dependsOn 'clean', 'uninstall', 'remove', 'install', 'verifyBundles'
-
-        return reinstallTask
     }
 
 
