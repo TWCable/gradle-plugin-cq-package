@@ -24,8 +24,11 @@ import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.internal.TaskInternal
+import org.gradle.api.internal.artifacts.publish.ArchivePublishArtifact
+import org.gradle.api.internal.plugins.DefaultArtifactPublicationSet
 import org.gradle.api.internal.tasks.execution.TaskValidator
 import org.gradle.api.plugins.BasePlugin
+import org.gradle.api.tasks.bundling.Jar
 
 import static com.twcable.gradle.GradleUtils.extension
 
@@ -335,10 +338,19 @@ class CqPackagePlugin implements Plugin<Project> {
 
 
     CreatePackageTask createPackage(Project project, AddBundlesToFilterXmlTask addBundlesToFilterXmlTask, Task verifyBundles) {
-        def task = project.tasks.create("createPackage", CreatePackageTask) as CreatePackageTask
-        task.dependsOn verifyBundles, addBundlesToFilterXmlTask
+        def cp = project.tasks.create("createPackage", CreatePackageTask).with { cpTask ->
+            project.tasks.withType(Jar) {
+                cpTask.mustRunAfter it
+            }
 
-        return task
+            cpTask.dependsOn verifyBundles, addBundlesToFilterXmlTask
+        } as CreatePackageTask
+
+        // add to the publication set, so it's picked up by things like the "assemble" task
+        def pubSet = (DefaultArtifactPublicationSet)project.extensions.getByType(DefaultArtifactPublicationSet)
+        pubSet.addCandidate(new ArchivePublishArtifact(cp))
+
+        return cp
     }
 
 
