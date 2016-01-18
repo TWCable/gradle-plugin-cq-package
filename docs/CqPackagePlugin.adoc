@@ -9,129 +9,136 @@ toc::[]
 
 `apply plugin: "com.twcable.cq-package"`
 
-The standard Gradle "base" plugin is automatically applied.
+The standard Gradle "base" plugin is automatically applied and the .zip created by `createPackage` is added to
+the list of artifacts.
 
 == Tasks
 
+=== Working Directly With Packages
+
 [horizontal]
+--
 createPackage::
-  Creates the CQ Package zip file. See description below.
+  This will create the `.zip` files that encapsulates a CQ Package file. It extends the `Zip` Gradle task, adding
+  special features to make it easier to work with for the specifics that CQ wants.
++
+See <<task-createpackage,the much more complete list of features below>>.
 
-install::
-  Issues the command to CQ to install the uploaded package.
 
-uninstall::
-  Uninstalls the CQ Package. If the package is not on the server, nothing happens.
-  (i.e., This does not fail if the package is not on the server.)
+uploadPackage::
+  Upload the package to all the servers defined by the `slingServers` configuration. This merely uploads the package
+  into Package Manager -- it does not automatically do the "install".
++
+If the package already exists (even as a "-SNAPSHOT"), you probably want to uninstall and remove it before
+uploading a new one. See
+http://blog.mooregreatsoftware.com/2015/07/21/aem-6-dot-1-packages-and-bundles-installing-and-uninstalling-behavior/[AEM 6.1 Packages and Bundles - Installing and Uninstalling Behavior]
+for much more information on why. For that reason it depends on `removePackage` by default.
++
+See <<task-uploadpackage,the `uploadPackage` configuration below>>, as well https://github.com/TWCable/gradle-plugin-cq-bundle/blob/master/docs/CqBundlePlugin.adoc#convention-slingservers[as `slingServers`].
 
-reinstall::
-  Convenience task that simple depends on `clean`, `uninstall`, `remove`, `install`, then `verifyBundles`.
 
 installPackage::
-  Installs the CQ Package that has been uploaded. **Note** Uses the name of the package. See below.
+  Installs the CQ Package that has been uploaded.
++
+Does not include uploading the package, so depending on your workflow you might want to do that first.
++
+Uses the name of the project as the name of the package. See below.
+
+
+uninstallPackage::
+  Uninstalls the CQ Package. **If the package is not on the server, nothing happens.**
+  (i.e., This does not fail if the package is not on the server.)
+
+
+removePackage::
+  Removes the package from CQ. **Does not fail if the package was not on the server to begin with.**
++
+This depends on `uninstallPackage` so that the old content is not left behind.
+
+--
+
+=== Working With Bundles In Packages
+
+[horizontal]
+--
 
 validateBundles::
-  Checks all the JARs that are included in the package to make sure they are installed and in an
-  ACTIVE state and gives a report of any that are not. This task polls in the case the bundles are newly installed.
+  Checks all the JARs that are included in this package to make sure they are installed and in an
+  ACTIVE state. Gives a report of any that are not. This task polls using
+  https://github.com/TWCable/gradle-plugin-cq-bundle/blob/master/docs/CqBundlePlugin.adoc#convention-slingservers[the
+  server settings for retries and max time] in the case the bundles are newly installed.
 
-installRemote::
-  Issues the command to CQ to install the uploaded package to a remote server defined
-  by `-Denvironment`, `-DenvJson`, and `-Dpackage`.
 
 validateRemoteBundles::
-  Validates remote bundles in the CQ Package are started correctly
-
-upload::
-  Upload the package to all the servers defined by the `slingServers` configuration.
-
-uploadRemote::
-  Upload the package to all the servers defined by `-Denvironment`, `-DenvJson`, and `-Dpackage`.
-
-remove::
-  Removes the package from CQ. Does not fail if the package was not on the server to begin with.
+  The same as `validateBundles` but downloads the package as it exists on the remote server, then extracts it to get
+  the bundles inside it. Useful in those situations where the "current" version of the package's list of bundles is
+  potentially different than what is installed on the server.
 
 uninstallBundles::
-  Downloads the currently installed package .zip file if it exists, compiles list of bundles
-  based off what is currently installed, then stops and uninstalls each bundles individually. A final
-  `refreshAllBundles` is performed.
+  Downloads the currently installed package .zip file if it exists, compiles a list of bundles
+  based off what is currently installed, then stops and uninstalls each bundles individually.
++
+This currently does not take dependency ordering into account. See https://github.com/TWCable/gradle-plugin-cq-package/issues/14[GH-14].
 
-installRemoteTask::
-  Installs a specified CQ Package to a remote environment.
+--
 
-verifyBundles::
-  Checks all the JARs that are included in the package to make sure they are OSGi compliant, and
-  gives a report of any that are not. Never causes the build to fail.
+=== Support Tasks
+
+[horizontal]
+--
 
 addBundlesToFilterXml::
   Adds the bundles to the `filter.xml`
 
-checkBundleStatus::
-  Check Bundle Status
+verifyBundles::
+  Checks all the JARs that are included in this package to make sure they are OSGi compliant, and
+  gives a report of any that are not. Never causes the build to fail.
 
 startInactiveBundles::
   Asynchronously attempts to start any bundle in RESOLVED state.
+--
 
-**Added by the 'base' plugin:**
-
-[horizontal]
-assemble::
-  Calls `createPackage`.
-
-clean::
-  Removes the build directory.
+Of course, if any of the automatically depended-upon tasks are not desired for any reason, simply disable
+it in your build file or with the `-x` command line option.
 
 
 == Configuration
 
 === Convention: `slingServers`
 
-By default, the plugin is initialized with the following effective configuration:
+This uses https://github.com/TWCable/gradle-plugin-cq-bundle/blob/master/docs/CqBundlePlugin.adoc#ways-of-configuring-slingservers[the `slingServers` configuration brought over from gradle-plugin-cq-bundle].
 
-[source,groovy]
---
-slingServers.with {
-  retryWaitMs = 1000
-  maxWaitValidateBundlesMs = 10000
-  clusterAuths = false
-  clusterPubs = false
-  uninstallBundlesPredicate = { false }
-  author.with {
-    protocol = 'http'
-    port = 4502
-    machineName = 'localhost'
-    username = 'admin'
-    password = 'admin'
-    installPath = '/apps/install'
-    active = true
-  }
-  publisher.with {
-    protocol = 'http'
-    port = 4503
-    machineName = 'localhost'
-    username = 'admin'
-    password = 'admin'
-    installPath = '/apps/install'
-    active = true
-  }
-}
---
+[[task-uploadpackage]]
+== Task `uploadPackage`
 
-To change the password for the author instance, for example, in the `build.gradle` file do
+=== Configuration
 
-[source,groovy]
-slingServers.author.password = "other_password"
+It can be useful to use an existing file rather than the output of `createPackage`.
+(e.g., In a deployment pipeline where the artifact is pulled from a repository.)
+Setting the `package` system property (i.e., `-Dpackage=XX`) will force the
+use of the specified file.
 
-The `active` property determines if it will try to interact with that server. If it has a problem connecting to
-the server, it is automatically set to be `false` so it does not keep trying to attach to a server that is not running.
-
-If `envJson` and `environment` properties are defined, the list of servers for this environment are extracted from
-the JSON file.  See link:../src/main/groovy/com/twcable/gradle/sling/EnvironmentJsonFileReader.groovy[EnvironmentJsonFileReader]
+This will fail if it doesn't have a file to upload, either because `createPackage` has not been run or the `package`
+system property has not been set.
 
 
+== Task `uninstallBundles`
+
+Downloads the currently installed package .zip file if it exists, compiles list of bundles based off what is
+currently installed, then stops and uninstalls each bundle individually.
+
+=== Configuration
+
+[horizontal]
+uninstallBundlesPredicate::
+  A predicate that takes in a bundle's symbolic name and returns true if it should be uninstalled. For example,
+  `{ it.startsWith('com.mystuff') }` will limit the scope to only those bundles starting with "com.mystuff".
+  **Defaults to always being `true`, so every bundle in the package will be uninstalled**
+
+
+
+[[task-createpackage]]
 == Task `createPackage`
-
-This will create the `.zip` files that encapsulates a CQ Package file. It extends the `Zip` Gradle task, adding
-special features to make it easier to work with for the specifics that CQ wants.
 
 === Features
 
