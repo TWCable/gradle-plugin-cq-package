@@ -37,6 +37,11 @@ import org.gradle.api.GradleException
 import org.gradle.api.plugins.JavaPlugin
 import spock.lang.Subject
 
+import static com.twcable.gradle.sling.osgi.BundleState.ACTIVE
+import static com.twcable.gradle.sling.osgi.BundleState.FRAGMENT
+import static com.twcable.gradle.sling.osgi.BundleState.INSTALLED
+import static com.twcable.gradle.sling.osgi.BundleState.RESOLVED
+import static java.net.HttpURLConnection.HTTP_INTERNAL_ERROR
 import static java.net.HttpURLConnection.HTTP_OK
 
 @SuppressWarnings(["GroovyAssignabilityCheck", "GroovyAccessibility", "GroovyPointlessBoolean"])
@@ -103,6 +108,26 @@ class CqPackageHelperSpec extends ProjectSpec {
     }
 
 
+    def "uninstall package, no problems"() {
+        def json = new JsonBuilder(PackageServerFixture.packageList(project.name))
+        1 * slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
+        1 * slingSupport.doPost(_, _) >> PackageServerFixture.successfulUninstallPackage()
+
+        expect:
+        cqPackageHelper.uninstallPackage(slingPackageSupportFactory)
+    }
+
+
+    def "uninstall package, no snapshot"() {
+        def json = new JsonBuilder(PackageServerFixture.packageList(project.name))
+        1 * slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
+        1 * slingSupport.doPost(_, _) >> PackageServerFixture.noSnapshotUninstallPackage()
+
+        expect:
+        cqPackageHelper.uninstallPackage(slingPackageSupportFactory)
+    }
+
+
     def "delete package, no problems"() {
         def json = new JsonBuilder(PackageServerFixture.packageList(project.name))
         1 * slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
@@ -140,7 +165,7 @@ class CqPackageHelperSpec extends ProjectSpec {
 
 
     def "listPackages for a server configuration"() {
-        def json = new JsonBuilder(packageList)
+        def json = new JsonBuilder(PackageServerFixture.packageList("fakepackage"))
         1 * slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
 
         expect:
@@ -149,8 +174,12 @@ class CqPackageHelperSpec extends ProjectSpec {
 
 
     def "packageDependencies"() {
+        def fixture = PackageFixture.of("day/cq550/product:cq-content:5.5.0.20120220").
+            dependency("froblez", null).
+            dependency("day/cq550/product:groblez", "day/cq550/product:groblez:1.2.3")
+
         when:
-        def props = RuntimePackageProperties.fromJson(packageList.results[0])
+        def props = RuntimePackageProperties.fromJson(PackageServerFixture.toMap(fixture))
 
         then:
         props.id.name == "cq-content"
@@ -169,80 +198,89 @@ class CqPackageHelperSpec extends ProjectSpec {
     }
 
 
-    static Map packageList = [
-        results: [
-            [
-                pid            : "day/cq550/product:cq-content:5.5.0.20120220",
-                path           : "/etc/packages/day/cq550/product/cq-content-5.5.0.20120220.zip",
-                name           : "cq-content",
-                downloadName   : "cq-content-5.5.0.20120220.zip",
-                group          : "day/cq550/product",
-                groupTitle     : "day",
-                version        : "5.5.0.20120220",
-                description    : "Default installation package that contains repository content for CQ5.",
-                thumbnail      : "/crx/packmgr/thumbnail.jsp?_charset_=utf-8&path=%2fetc%2fpackages%2fday%2fcq550%2fproduct%2fcq-content-5.5.0.20120220.zip&ck=1345049949526",
-                buildCount     : 0,
-                created        : 1329751518460,
-                createdBy      : "Adobe Systems Incorporated",
-                lastUnpacked   : 1345049995338,
-                lastUnpackedBy : "admin",
-                lastUnwrapped  : 1345049949532,
-                lastUnwrappedBy: "admin",
-                size           : 78532000,
-                hasSnapshot    : false,
-                needsRewrap    : false,
-                builtWith      : "Adobe CQ5-5.5.0.SNAPSHOT",
-                requiresRoot   : false,
-                requiresRestart: false,
-                acHandling     : "merge_preserve",
-                filter         : [
-                    [root: "/var", rules: [[modifier: "include", pattern: "/var/classes(/.*)?"],
-                                           [modifier: "include", pattern: "/var/audit"],
-                                           [modifier: "include", pattern: "/var/proxy(/.*)?"]]],
-                    [root: "/", rules: [[modifier: "include", pattern: "/"],
-                                        [modifier: "include", pattern: "/var"]]]],
-                screenshots    : [
-                    "/etc/packages/day/cq550/product/cq-content-5.5.0.20120220.zip/jcr:content/vlt:definition/screenshots/90d23940-7b63-4631-bea7-014326b418d3",
-                    "/etc/packages/day/cq550/product/cq-content-5.5.0.20120220.zip/jcr:content/vlt:definition/screenshots/7fbe6b69-e0bc-49b0-8cdb-85b257986aee"
-                ],
-                dependencies   : [
-                    [name: "froblez", id: ""],
-                    [name: "day/cq550/product:groblez", id: "day/cq550/product:groblez:1.2.3"],
-                ],
-            ],
-            [
-                pid            : "twc/webcms:fakepackage:1.0.1-SNAPSHOT",
-                path           : "/etc/packages/fakepackage-1.0.1-SNAPSHOT.zip",
-                name           : "fakepackage",
-                downloadName   : "fakepackage-1.0.1-SNAPSHOT.zip",
-                group          : "twc/webcms",
-                groupTitle     : "twc",
-                version        : "1.0.1-SNAPSHOT",
-                description    : "FakePackage - JCR",
-                thumbnail      : "/crx/packmgr/thumbnail.jsp?_charset_=utf-8&path=%2fetc%2fpackages%2ffakepackage-1.0.1-SNAPSHOT.zip&ck=1359577761522",
-                buildCount     : 1,
-                lastUnwrapped  : 1359577685665,
-                size           : 24277786,
-                hasSnapshot    : false,
-                needsRewrap    : true,
-                builtWith      : "Adobe CQ5-5.5.0",
-                requiresRoot   : true,
-                requiresRestart: false,
-                acHandling     : "overwrite",
-                dependencies   : [],
-                providerName   : "Time Warner Cable",
-                providerUrl    : "http://www.timewarnercable.com",
-                filter         : [
-                    [root: "/apps/common", rules: []],
-                    [root: "/etc/clientlibs/common", rules: []],
-                    [root: "/etc/designs/common", rules: [[modifier: "exclude", pattern: "/etc/designs/common/jcr:content/(.*)?"]]],
-                    [root: "/var/classes/org/apache/jsp/apps", rules: []],
-                    [root: "/var/clientlibs/apps", rules: []],
-                    [root: "/var/clientlibs/etc", rules: []]],
-                screenshots    : []
-            ]
-        ],
-        total  : 16]
+    def "validate all bundles: resolved -> active"() {
+        given:
+        symbolicName = 'b.c.d.e'
+
+        4 * slingSupport.doGet(bundleServerConf.bundlesControlUri) >>> [
+            bundlesResp(bundleConfiguration, RESOLVED),
+            bundlesResp(bundleConfiguration, RESOLVED),
+            bundlesResp(bundleConfiguration, RESOLVED),
+            bundlesResp(bundleConfiguration, ACTIVE)
+        ]
+
+        when:
+        def resp = cqPackageHelper.validateAllBundles([symbolicName], slingSupport)
+
+        then:
+        resp.code == HTTP_OK
+    }
+
+
+    def "start inactive bundles"() {
+        given:
+        stubGet getBundleServerConf().bundlesControlUri, bundlesResp(bundleConfiguration, INSTALLED)
+
+        when:
+        cqPackageHelper.startInactiveBundles(slingSupport)
+
+        then:
+        true // the fact that no exception was thrown shows that it's good
+    }
+
+
+    def "validate all bundles: resolved"() {
+        given:
+        stubGet bundleServerConf.bundlesControlUri, bundlesResp(bundleConfiguration, RESOLVED)
+
+        when:
+        def resp = cqPackageHelper.validateAllBundles([symbolicName], slingSupport)
+
+        then:
+        resp.code == HTTP_INTERNAL_ERROR
+        resp.body ==~ /Not all bundles .* are ACTIVE.*/
+    }
+
+
+    def "validate all bundles: installed"() {
+        given:
+        stubGet bundleServerConf.bundlesControlUri, bundlesResp(bundleConfiguration, INSTALLED)
+
+        when:
+        def resp = cqPackageHelper.validateAllBundles([symbolicName], slingSupport)
+
+        then:
+        resp.code == HTTP_INTERNAL_ERROR
+        resp.body ==~ /Not all bundles .* are ACTIVE.*/
+    }
+
+
+    def "validate all bundles: fragment"() {
+        given:
+        symbolicName = 'b.c.d.e'
+        stubGet bundleServerConf.bundlesControlUri, bundlesResp(bundleConfiguration, FRAGMENT)
+
+        when:
+        def resp = cqPackageHelper.validateAllBundles([symbolicName], slingSupport)
+
+        then:
+        resp.code == HTTP_OK
+    }
+
+
+    def "validate all bundles: missing"() {
+        given:
+        def serverFixture = new SlingServerFixture(bundles: [new SlingBundleFixture(bundleConfiguration: bundleConfiguration)])
+
+        stubGet bundleServerConf.bundlesControlUri, okResp(serverFixture.bundlesInformationJson(false))
+
+        when:
+        def resp = cqPackageHelper.validateAllBundles(['b.c.d.e'], slingSupport)
+
+        then:
+        resp.code == HTTP_INTERNAL_ERROR
+        resp.body ==~ /Not all bundles .* are ACTIVE.*/
+    }
 
     // **********************************************************************
     //
