@@ -20,6 +20,7 @@ import com.twcable.gradle.sling.SlingServersConfiguration
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import org.apache.http.entity.mime.content.FileBody
+import org.apache.jackrabbit.vault.packaging.PackageId
 import org.apache.jackrabbit.vault.packaging.PackageManager
 import org.apache.jackrabbit.vault.packaging.impl.PackageManagerImpl
 import org.gradle.api.GradleException
@@ -152,7 +153,7 @@ in other words, there's no indication it's missing its dependency at this point
         final postParams = ['force': Boolean.toString(force), 'package': new FileBody(packageFile, 'application/zip')]
         final uploadStatus = CqPackageCommand.doCommand("upload", packageName, packageSupport, postParams, falseStatusHandler)
         if (uploadStatus == OK) {
-            final packageInfoSF = RuntimePackageProperties.packageProperties(packageSupport, packageName)
+            final packageInfoSF = RuntimePackageProperties.packageProperties(packageSupport, PackageId.fromString(packageName))
             if (packageInfoSF.failed()) return packageInfoSF.error
             return packageInfoSF.value.hasUnresolvedDependencies() ? UNRESOLVED_DEPENDENCIES : OK
         }

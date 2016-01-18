@@ -17,45 +17,52 @@ package com.twcable.gradle.cqpackage
 
 import com.twcable.gradle.http.HttpResponse
 import com.twcable.gradle.http.SimpleHttpClient
+import com.twcable.gradle.sling.SlingBundleFixture
 import com.twcable.gradle.sling.SlingServerConfiguration
+import com.twcable.gradle.sling.SlingServerFixture
 import com.twcable.gradle.sling.SlingServersConfiguration
 import com.twcable.gradle.sling.SlingSupport
+import com.twcable.gradle.sling.osgi.BundleServerConfiguration
+import com.twcable.gradle.sling.osgi.BundleState
+import com.twcable.gradle.sling.osgi.SlingBundleConfiguration
+import com.twcable.gradle.sling.osgi.SlingBundleSupport
+import com.twcable.gradle.sling.osgi.SlingProjectBundleConfiguration
 import groovy.json.JsonBuilder
+import groovy.transform.TypeChecked
+import nebula.test.ProjectSpec
 import org.apache.jackrabbit.vault.packaging.PackageId
 import org.apache.jackrabbit.vault.packaging.PackageManager
 import org.apache.jackrabbit.vault.packaging.VaultPackage
 import org.gradle.api.GradleException
-import org.gradle.api.Project
-import org.gradle.testfixtures.ProjectBuilder
-import spock.lang.Specification
+import org.gradle.api.plugins.JavaPlugin
 import spock.lang.Subject
 
 import static java.net.HttpURLConnection.HTTP_OK
 
-@SuppressWarnings(["GroovyAssignabilityCheck", "GroovyAccessibility"])
-class CqPackageHelperSpec extends Specification {
+@SuppressWarnings(["GroovyAssignabilityCheck", "GroovyAccessibility", "GroovyPointlessBoolean"])
+class CqPackageHelperSpec extends ProjectSpec {
     @Subject
     CqPackageHelper cqPackageHelper
 
-    def slingServersConfiguration = Mock(SlingServersConfiguration)
-    def slingServerConfiguration = Mock(SlingServerConfiguration)
-    def slingSupport = Mock(SlingSupport)
+    SlingServersConfiguration slingServersConfiguration
+    SlingServerConfiguration slingServerConfiguration
+    BundleServerConfiguration _serverConf
+    SlingSupport _slingSupport
 
 
     def setup() {
-        slingServersConfiguration.iterator() >> [slingServerConfiguration].iterator()
+        slingServersConfiguration = project.extensions.create(SlingServersConfiguration.NAME, SlingServersConfiguration, project)
+        slingServerConfiguration = new SlingServerConfiguration().with {
+            maxWaitMs = 1_000
+            retryWaitMs = 10
+            active = true
+            machineName = 'test'
+            it
+        }
+        slingServersConfiguration.servers.clear()
+        slingServersConfiguration.servers.put(slingServerConfiguration.name, slingServerConfiguration)
 
-        slingServerConfiguration.maxWaitMs >> 1_000
-        slingServerConfiguration.retryWaitMs >> 10
-        slingServerConfiguration.getActive() >> true
-        slingServerConfiguration.getBaseUri() >> URI.create('http://test')
-
-        SimpleHttpClient httpClient = Mock(SimpleHttpClient)
-        slingSupport.doHttp(_) >> { Closure closure -> closure.delegate = slingSupport; closure.call(httpClient) }
-
-        Project project = ProjectBuilder.builder().withName("fakepackage").build()
-
-        project.extensions.add('slingServers', slingServersConfiguration)
+        project.plugins.apply(JavaPlugin)
 
         cqPackageHelper = project.extensions.create(CqPackageHelper.NAME, CqPackageHelper, project)
 
@@ -64,9 +71,11 @@ class CqPackageHelperSpec extends Specification {
 
 
     def "upload package, no problems"() {
-        def json = new JsonBuilder(packageList)
+        System.setProperty('package', projectDir.absolutePath)
+
+        def json = new JsonBuilder(PackageServerFixture.packageList("fakepackage"))
         1 * slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
-        1 * slingSupport.doPost(_, _) >> { new HttpResponse(HTTP_OK, '{"success": true, "msg": "File uploaded"}') }
+        1 * slingSupport.doPost(_, _) >> PackageServerFixture.successfulPackageUpload()
 
         cqPackageHelper.packageManager = Mock(PackageManager) {
             open(_) >> {
@@ -77,14 +86,17 @@ class CqPackageHelperSpec extends Specification {
         }
 
         expect:
-        cqPackageHelper.uploadPackage(slingPackageSupportFactory)
+        cqPackageHelper.uploadPackage(slingPackageSupportFactory) == Status.OK
+
+        cleanup:
+        System.clearProperty('package')
     }
 
 
     def "install package, no problems"() {
-        def json = new JsonBuilder(packageList)
+        def json = new JsonBuilder(PackageServerFixture.packageList(project.name))
         1 * slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
-        1 * slingSupport.doPost(_, _) >> { new HttpResponse(HTTP_OK, '{"success": true, "msg": "File installed"}') }
+        1 * slingSupport.doPost(_, _) >> PackageServerFixture.successfulInstallPackage()
 
         expect:
         cqPackageHelper.installPackage(slingPackageSupportFactory)
@@ -92,9 +104,9 @@ class CqPackageHelperSpec extends Specification {
 
 
     def "delete package, no problems"() {
-        def json = new JsonBuilder(packageList)
+        def json = new JsonBuilder(PackageServerFixture.packageList(project.name))
         1 * slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
-        1 * slingSupport.doPost(_, _) >> { new HttpResponse(HTTP_OK, '{"success": true, "msg": "File deleted"}') }
+        1 * slingSupport.doPost(_, _) >> PackageServerFixture.successfulDeletePackage()
 
         expect:
         cqPackageHelper.deletePackage(slingPackageSupportFactory)
@@ -102,6 +114,8 @@ class CqPackageHelperSpec extends Specification {
 
 
     def "upload package, package exists"() {
+        System.setProperty('package', projectDir.absolutePath)
+
         cqPackageHelper.packageManager = Mock(PackageManager) {
             open(_) >> {
                 return Mock(VaultPackage) {
@@ -111,7 +125,7 @@ class CqPackageHelperSpec extends Specification {
         }
 
         1 * slingSupport.doPost(_, _) >>
-            new HttpResponse(HTTP_OK, '{"success":false, "msg":"Package already exists: fakepackage"}')
+            PackageServerFixture.uploadedPackageAlreadyExists("fakepackage")
 
         when:
         cqPackageHelper.uploadPackage(slingPackageSupportFactory)
@@ -119,6 +133,9 @@ class CqPackageHelperSpec extends Specification {
         then:
         def exp = thrown(GradleException)
         exp.message.contains("Package already exists")
+
+        cleanup:
+        System.clearProperty('package')
     }
 
 
@@ -128,15 +145,6 @@ class CqPackageHelperSpec extends Specification {
 
         expect:
         cqPackageHelper.listPackages(slingPackageSupportFactory.create(slingServerConfiguration))
-    }
-
-
-    def "getPackageInfo for a server configuration"() {
-        def json = new JsonBuilder(packageList)
-        slingSupport.doGet(_) >> { new HttpResponse(HTTP_OK, json.toString()) }
-
-        expect:
-        cqPackageHelper.getPackageInfo(slingPackageSupportFactory.create(slingServerConfiguration))
     }
 
 
@@ -235,6 +243,95 @@ class CqPackageHelperSpec extends Specification {
             ]
         ],
         total  : 16]
+
+    // **********************************************************************
+    //
+    // HELPER METHODS
+    //
+    // **********************************************************************
+
+    @TypeChecked
+    SlingBundleConfiguration getBundleConfiguration() {
+        def bundleConfiguration = project.extensions.findByType(SlingBundleConfiguration)
+        if (bundleConfiguration == null) {
+            return project.extensions.create(SlingProjectBundleConfiguration.NAME, SlingProjectBundleConfiguration, project)
+        }
+        return bundleConfiguration
+    }
+
+
+    @TypeChecked
+    BundleServerConfiguration getBundleServerConf() {
+        if (_serverConf == null) {
+            _serverConf = new BundleServerConfiguration(slingServerConfiguration)
+        }
+        return _serverConf
+    }
+
+
+    @TypeChecked
+    void setSymbolicName(String symbolicName) {
+        bundleConfiguration.symbolicName = symbolicName
+    }
+
+
+    @TypeChecked
+    String getSymbolicName() {
+        return bundleConfiguration.symbolicName
+    }
+
+
+    SlingSupport mockSlingSupport() {
+        return Mock(SlingSupport) {
+            getServerConf() >> bundleServerConf.serverConf
+            SimpleHttpClient httpClient = Mock(SimpleHttpClient)
+            SlingSupport slingSupport = it
+            slingSupport.doHttp(_) >> { Closure closure -> closure.delegate = slingSupport; closure.call(httpClient) }
+            0 * /do.*/(*_) // complain if any unexpected calls are made
+        }
+    }
+
+
+    @TypeChecked
+    SlingBundleSupport getSlingBundleSupport() {
+        return new SlingBundleSupport(bundleConfiguration, bundleServerConf, slingSupport)
+    }
+
+
+    @TypeChecked
+    SlingSupport getSlingSupport() {
+        if (_slingSupport == null) {
+            _slingSupport = mockSlingSupport()
+        }
+        return _slingSupport
+    }
+
+
+    void stubGet(URI uri, HttpResponse response) {
+        slingSupport.doGet(uri) >> response
+    }
+
+
+    @TypeChecked
+    HttpResponse bundlesResp(SlingBundleConfiguration bundleConfiguration, BundleState state) {
+        return new HttpResponse(HTTP_OK, bundlesJson(bundleConfiguration, state))
+    }
+
+
+    @TypeChecked
+    String bundlesJson(SlingBundleConfiguration bundleConfiguration, BundleState state) {
+        def bundleFixture = new SlingBundleFixture(bundleConfiguration: bundleConfiguration, bundleState: state)
+
+        def serverFixture = new SlingServerFixture(bundles: [bundleFixture])
+
+        return serverFixture.bundlesInformationJson(false)
+    }
+
+
+    @TypeChecked
+    public HttpResponse okResp(String body) {
+        return new HttpResponse(HTTP_OK, body)
+    }
 
 
     SimpleSlingPackageSupportFactory getSlingPackageSupportFactory() {

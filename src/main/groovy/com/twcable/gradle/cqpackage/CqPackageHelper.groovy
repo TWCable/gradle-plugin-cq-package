@@ -134,29 +134,6 @@ class CqPackageHelper {
     }
 
     /**
-     * Asks the given server for its information for the package identified by {@link #getPackageName()}.
-     *
-     * @return null if the package is not found on the server
-     *
-     * @see #getPackageName()
-     * @deprecated use {@link RuntimePackageProperties#packageProperties(SlingPackageSupport, String)}
-     */
-    @Nullable
-    RuntimePackageProperties getPackageInfo(SlingPackageSupport slingPackageSupport) {
-        if (!slingPackageSupport.active) return null
-
-        def packageInfoSF = RuntimePackageProperties.packageProperties(slingPackageSupport, packageName)
-
-        if (packageInfoSF.failed()) {
-            switch (packageInfoSF.error) {
-                case Status.SERVER_TIMEOUT: slingPackageSupport.active = false; return null
-                default: return null
-            }
-        }
-        return packageInfoSF.value
-    }
-
-    /**
      * Uploads the Package for the current Project to all the servers.
      *
      * @param factory strategy for creating SlingPackageSupport instances
@@ -303,12 +280,12 @@ class CqPackageHelper {
      */
     static boolean isBadResponse(int respCode, boolean missingIsOk) {
         if (respCode == HTTP_NOT_FOUND) return !missingIsOk
+
         if (respCode >= HTTP_OK) {
             if (respCode < HTTP_BAD_REQUEST) return false
             if (respCode == HTTP_CLIENT_TIMEOUT) return false
             return true
         }
-
         return true
     }
 
@@ -495,7 +472,7 @@ class CqPackageHelper {
             def serverConf = slingSupport.serverConf
             def packageServerConfiguration = new PackageServerConfiguration(serverConf)
             def slingPackageSupport = new SlingPackageSupport(packageServerConfiguration, slingSupport)
-            def packageInfo = RuntimePackageProperties.packageProperties(slingPackageSupport, packageName)
+            def packageInfo = RuntimePackageProperties.packageProperties(slingPackageSupport, PackageId.fromString(packageName))
             if (packageInfo.succeeded()) { // package is installed
                 def namesFromDownloadedPackage = symbolicNamesFromDownloadedPackage(slingPackageSupport)
                 return uninstallAllBundles(namesFromDownloadedPackage, slingSupport, bundlePredicate)
@@ -525,6 +502,7 @@ class CqPackageHelper {
         log.info "Uninstalling/removing bundles on ${slingSupport.serverConf.name}: ${symbolicNames}"
 
         def httpResponse = new HttpResponse(HTTP_OK, '')
+
         Iterator<String> symbolicNameIter = symbolicNames.iterator()
 
         while (symbolicNameIter.hasNext() && !isBadResponse(httpResponse.code, true)) {
@@ -588,7 +566,7 @@ class CqPackageHelper {
         try {
             File downloadDir = new File("${project.buildDir}/tmp")
             downloadDir.mkdirs()
-            def packageInfoSF = RuntimePackageProperties.packageProperties(slingPackageSupport, packageName)
+            def packageInfoSF = RuntimePackageProperties.packageProperties(slingPackageSupport, PackageId.fromString(packageName))
             if (packageInfoSF.failed()) throw new IllegalStateException("Could not get package information: ${packageInfoSF.error}")
             def packageInfo = packageInfoSF.value
             log.info "Download filename ${packageInfo.downloadName}"

@@ -21,6 +21,7 @@ import com.twcable.gradle.sling.SlingSupport
 import groovy.json.JsonSlurper
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
+import org.apache.jackrabbit.vault.packaging.PackageId
 import org.gradle.api.GradleException
 
 import javax.annotation.Nonnull
@@ -102,7 +103,7 @@ class CqPackageCommand {
         def packageServerConfig = slingPackageSupport.packageServerConf
 
         if (commandName != "upload") {
-            final packageInfoSF = RuntimePackageProperties.packageProperties(slingPackageSupport, packageName)
+            final packageInfoSF = RuntimePackageProperties.packageProperties(slingPackageSupport, PackageId.fromString(packageName))
             if (packageInfoSF.failed()) return SuccessOrFailure.failure(packageInfoSF.error)
             def packageInfo = packageInfoSF.value
 
