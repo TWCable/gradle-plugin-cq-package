@@ -252,7 +252,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
 
         when:
         // 'createPackage' being last in this list verifies the 'mustRunAfter' relationship
-        result = runTasks("upload", "createPackage")
+        result = runTasks("upload", "createPackage", "-x", "remove")
 
         then:
         result.success
@@ -260,12 +260,26 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
     }
 
 
+    def "upload package without createPackage"() {
+        defaultPackageListHandler()
+        postHandler.addFileResponse("/crx/packmgr/service/.json", successfulPackageUpload().body)
+
+        writeSimpleBuildFile()
+
+        when:
+        result = runTasks("upload", "-x", "remove")
+
+        then:
+        !result.success
+        def exp = result.failure.cause
+        exp.task.name == 'upload'
+        exp.cause.message.contains("there is no output from the 'createPackage' task")
+    }
+
+
     def "upload package with package property"() {
         def testPackageFilename = this.class.classLoader.getResource("testpackage-1.0.1.zip").file
         System.setProperty('package', testPackageFilename)
-
-        writeHelloWorld('com.twcable.test', projectDir)
-        createVaultMetaInf(projectDir)
 
         getHandler.addPathResponse("/crx/packmgr/list.jsp",
             new JsonBuilder(
@@ -280,10 +294,11 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         writeSimpleBuildFile()
 
         when:
-        result = runTasks("upload")
+        result = runTasks("upload", "-x", "remove")
 
         then:
         result.success
+        !result.wasExecuted(':createPackage')
 
         cleanup:
         System.clearProperty('package')
