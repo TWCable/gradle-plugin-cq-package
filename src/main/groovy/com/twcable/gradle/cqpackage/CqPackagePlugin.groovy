@@ -18,55 +18,28 @@ package com.twcable.gradle.cqpackage
 import com.twcable.gradle.sling.SlingServersConfiguration
 import groovy.transform.TypeChecked
 import groovy.util.logging.Slf4j
-import org.gradle.api.DefaultTask
+import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.artifacts.Configuration
-import org.gradle.api.internal.TaskInternal
 import org.gradle.api.internal.artifacts.publish.ArchivePublishArtifact
 import org.gradle.api.internal.plugins.DefaultArtifactPublicationSet
-import org.gradle.api.internal.tasks.execution.TaskValidator
 import org.gradle.api.plugins.BasePlugin
-import org.gradle.api.tasks.bundling.Jar
+import org.gradle.jvm.tasks.Jar
 
 import static com.twcable.gradle.GradleUtils.extension
+import static com.twcable.gradle.cqpackage.CqPackageHelper.isBadResponse
 
 /**
  * <h1>Plugin name</h1>
- * "cqpackage"
+ * "com.twcable.cq-package"
  *
  * <h1>Description</h1>
- * Adds tasks for working with CQ Packages via the Sling HTTP interface.
- *
- * <h1>Tasks</h1>
- * <table>
- *  <tr><td>createPackage</td><td>Creates the CQ Package zip file.</td></tr>
- *  <tr><td>install</td><td>Issues the command to CQ to install the uploaded package.</td></tr>
- *  <tr><td>uninstall</td><td>Uninstalls the CQ Package. If the package is not on the server, nothing happens. (i.e., This does not fail if the package is not on the server.)</td></tr>
- *  <tr><td>installPackage</td><td>Installs the CQ Package</td></tr>
- *  <tr><td>validateBundles</td><td>Checks all the JARs that are included in the package to make sure they are installed and in an ACTIVE state and gives a report of any that are not. This task polls in the case the bundles are newly installed.</td></tr>
- *  <tr><td>installRemote</td><td>Issues the command to CQ to install the uploaded package to a remote server defined by -Denvironment, -DenvJson, and -Dpackage.</td></tr>
- *  <tr><td>validateRemoteBundles</td><td>Validates remote bundles in the CQ Package are started correctly</td></tr>
- *  <tr><td>upload</td><td>Upload the package to all the servers defined by the `slingServers` configuration.</td></tr>
- *  <tr><td>uploadRemote</td><td>Upload the package to all the servers defined by -Denvironment, -DenvJson, and -Dpackage.</td></tr>
- *  <tr><td>remove</td><td>Removes the package from CQ. Does not fail if the package was not on the server to begin with.</td></tr>
- *  <tr><td>uninstallBundles</td><td>Downloads the currently installed package .zip file if it exists, compiles list of bundles based off what is currently installed, then stops and uninstalls each bundles individually.  A final `refreshAllBundles` is performed.</td></tr>
- *  <tr><td>installRemoteTask</td><td>Installs a specified CQ Package to a remote environment</td></tr>
- *  <tr><td>verifyBundles</td><td>Checks all the JARs that are included in the package to make sure they are OSGi compliant, and gives a report of any that are not. Never causes the build to fail.</td></tr>
- *  <tr><td>addBundlesToFilterXml</td><td>Adds the bundles to the filter.xml</td></tr>
- *  <tr><td>startInactiveBundles</td><td>Asynchronously attempts to start any bundle in RESOLVED state.</td></tr>
- * </table>
- *
- * <h1>Artifact Configurations</h1>
- * <table>
- *   <tr><th>name</th><th>description</th></tr>
- *   <tr><td>cq_package</td><td>All the project and third-party bundles that should be packaged in the zip</td></tr>
- * </table>
+ * Adds tasks for working with CQ/Jackrabbit/Sling Packages.
  * <p>
- *
- * @see SlingServersConfiguration
- * @see CreatePackageTask
+ * See <a href="https://github.com/TWCable/gradle-plugin-cq-package/blob/master/docs/CqPackagePlugin.adoc">the plugin
+ * documentation</a> for specifics on how this is expected to work.
  */
 @Slf4j
 @TypeChecked
@@ -123,224 +96,169 @@ class CqPackagePlugin implements Plugin<Project> {
 
         def verifyBundles = verifyBundles(project)
         def addBundlesToFilterXml = addBundlesToFilterXml(project)
-        createPackage(project, addBundlesToFilterXml, verifyBundles)
+        Task createPackage = createPackage(project, addBundlesToFilterXml, verifyBundles)
 
-        uninstallBundles(project)
-        uninstall(project)
-        remove(project)
-        upload(project)
-        uploadRemote(project)
-        installPackage(project)
-        installRemoteTask(project)
-
+        Task uninstallBundles = uninstallBundles(project)
+        Task uninstallPackage = uninstallPackage(project, uninstallBundles)
+        Task removePackage = removePackage(project, uninstallPackage)
+        Task uploadPackage = uploadPackage(project, createPackage, uninstallPackage, removePackage)
+        Task installPackage = installPackage(project, uploadPackage, uninstallPackage)
         validateBundles(project)
-
         validateRemoteBundles(project)
+        startInactiveBundles(project, installPackage, uninstallPackage)
 
-        startInactiveBundles(project)
-        install(project)
-        installRemote(project)
         project.logger.debug "Finished adding tasks for ${this.class.name} to ${project}"
     }
 
-    // TODO: Should be able to get rid of 'installRemoteTask'
-    private void installRemote(Project project) {
-        Boolean.valueOf('true')
-        project.tasks.create('installRemote').configure { Task task ->
-            task.description = "Sequence of tasks to install CQ Package to a remote environment"
-            task.group = 'CQ'
-            task.dependsOn 'uninstall', 'remove', 'installRemoteTask'
-        }
-    }
 
+    private Task startInactiveBundles(Project project, Task installPackage, Task uninstallPackage) {
+        return project.tasks.create('startInactiveBundles').with {
+            description = "Asynchronously attempts to start any bundle in a RESOLVED state."
+            group = 'CQ'
 
-    private void startInactiveBundles(Project project) {
-        project.tasks.create('startInactiveBundles').configure { Task task ->
-            task.description = "Asynchronously attempts to start any bundle in RESOLVED state."
-            task.group = 'CQ'
-            task.doLast {
-                getCqPackageHelper(project).startInactiveBundles()
+            doLast {
+                cqPackageHelper(project).startInactiveBundles()
             }
+
+            mustRunAfter installPackage, uninstallPackage
         }
     }
 
 
     private Task verifyBundles(Project project) {
-        return project.tasks.create('verifyBundles', VerifyBundlesTask) { Task task ->
-            task.description = "Checks all the JARs that are included in the package to make sure they are " +
+        return project.tasks.create('verifyBundles', VerifyBundlesTask).with {
+            description = "Checks all the JARs that are included in this package to make sure they are OSGi " +
+                "compliant, and gives a report of any that are not. Never causes the build to fail."
+            group = 'CQ'
+            it
+        }
+    }
+
+
+    private Task installPackage(Project project, Task uploadPackage, Task uninstallPackage) {
+        return project.tasks.create('installPackage').with {
+            description = "Installs the CQ Package that has been uploaded"
+            group = 'CQ'
+
+            doLast {
+                cqPackageHelper(project).installPackage(SimpleSlingPackageSupportFactory.INSTANCE)
+            }
+
+            mustRunAfter uploadPackage, uninstallPackage
+        }
+    }
+
+
+    Task uploadPackage(Project project, Task createPackage, Task uninstallPackage, Task removePackage) {
+        return project.tasks.create('uploadPackage').with {
+            description = "Uploads the CQ Package"
+            group = 'CQ'
+
+            doLast {
+                def status = cqPackageHelper(project).uploadPackage(SimpleSlingPackageSupportFactory.INSTANCE)
+                if (status != Status.OK) throw new GradleException(status.name)
+            }
+
+            dependsOn removePackage
+            mustRunAfter createPackage, uninstallPackage
+        }
+    }
+
+
+    Task removePackage(Project project, Task uninstallPackage) {
+        return project.tasks.create('removePackage').with {
+            description = "Removes the package from CQ. Does not fail if the package was not on " +
+                "the server to begin with."
+            group = 'CQ'
+
+            doLast {
+                cqPackageHelper(project).deletePackage(SimpleSlingPackageSupportFactory.INSTANCE)
+            }
+
+            dependsOn uninstallPackage
+        }
+    }
+
+
+    Task uninstallPackage(Project project, Task uninstallBundles) {
+        return project.tasks.create('uninstallPackage').with {
+            description = "Uninstalls the CQ Package. If the package is not on the server, nothing happens. " +
+                "(i.e., This does not fail if the package is not on the server.)"
+            group = 'CQ'
+
+            doLast {
+                def packageHelper = cqPackageHelper(project)
+                packageHelper.uninstallPackage(SimpleSlingPackageSupportFactory.INSTANCE)
+            }
+
+            mustRunAfter uninstallBundles
+        }
+    }
+
+
+    UninstallBundlesTask uninstallBundles(Project project) {
+        return project.tasks.create('uninstallBundles', UninstallBundlesTask).with {
+            description = "Downloads the currently installed package .zip file if it exists, compiles list of " +
+                "bundles based off what is currently installed, then stops and uninstalls each bundle individually."
+            group = 'CQ'
+            it
+        }
+    }
+
+    /**
+     * @see AddBundlesToFilterXmlTask
+     */
+    AddBundlesToFilterXmlTask addBundlesToFilterXml(Project project) {
+        return project.tasks.create('addBundlesToFilterXml', AddBundlesToFilterXmlTask).with {
+            description = "Adds the bundles to the filter.xml"
+            group = 'CQ'
+            it
+        }
+    }
+
+    /**
+     * @see CqPackageHelper#validateRemoteBundles()
+     */
+    Task validateRemoteBundles(Project project) {
+        return project.tasks.create('validateRemoteBundles').with {
+            description = "Validates remote bundles in the CQ Package are started correctly"
+            group = 'CQ'
+
+            doLast {
+                def resp = cqPackageHelper(project).validateRemoteBundles()
+                if (isBadResponse(resp.code, false)) throw new GradleException("Could not validate bundles: ${resp}")
+            }
+        }
+    }
+
+    /**
+     * @see CqPackageHelper#validateBundles(org.gradle.api.artifacts.Configuration)
+     */
+    Task validateBundles(Project project) {
+        return project.tasks.create('validateBundles').with {
+            description = "Checks all the JARs that are included in the package to make sure they are " +
                 "installed and in an ACTIVE state and gives a report of any that are not. This task polls in the " +
                 "case the bundles are newly installed."
-            task.group = 'CQ'
-        }
-    }
+            group = 'CQ'
 
-
-    private void installRemoteTask(Project project) {
-        project.tasks.create('installRemoteTask').configure { DefaultTask task ->
-            task.description = "Installs a specified CQ Package to a remote environment"
-            task.group = 'CQ'
-            task.dependsOn 'uploadRemote'
-            task.doLast {
-                getCqPackageHelper(project).installPackage(SimpleSlingPackageSupportFactory.INSTANCE)
+            doLast {
+                def packageHelper = cqPackageHelper(project)
+                def packageDependencies = cqPackageDependencies(project)
+                def resp = packageHelper.validateBundles(packageDependencies)
+                if (isBadResponse(resp.code, false)) throw new GradleException("Could not validate bundles: ${resp}")
             }
 
-            task.addValidator({ TaskInternal t, Collection<String> messages ->
-                if (!System.hasProperty('package')) {
-                    messages << "No package path passed in to remotely install. Use -Dpackage=<filepath>"
-                }
-            } as TaskValidator)
+            dependsOn cqPackageDependencies(project)
         }
     }
 
-
-    private void installPackage(Project project) {
-        project.tasks.create('installPackage').configure { Task task ->
-            task.description = "Installs the CQ Package"
-            task.group = 'CQ'
-            task.doLast {
-                getCqPackageHelper(project).installPackage(SimpleSlingPackageSupportFactory.INSTANCE)
-            }
-            task.mustRunAfter 'upload'
-        }
-    }
-
-
-    Task uploadRemote(Project project) {
-        Task task = project.task([
-            description: "Uploads the CQ Package to a remote environment",
-            group      : 'CQ',
-        ], 'uploadRemote')
-
-        task.doLast {
-            getCqPackageHelper(project).uploadPackage(SimpleSlingPackageSupportFactory.INSTANCE)
-        }
-
-        task.dependsOn 'createPackage'
-        task.mustRunAfter 'remove'
-
-        return task
-    }
-
-
-    Task upload(Project project) {
-        Task task = project.task([description: "Uploads the CQ Package", group: 'CQ'], 'upload') << {
-            getCqPackageHelper(project).uploadPackage(SimpleSlingPackageSupportFactory.INSTANCE)
-        }
-
-        task.dependsOn 'remove'
-        task.mustRunAfter 'createPackage', 'uninstall'
-
-        return task
-    }
-
-
-    Task validateRemoteBundles(Project project) {
-        Task task = project.task([
-            description: "Validates remote bundles in the CQ Package are started correctly",
-            group      : 'CQ'
-        ], 'validateRemoteBundles')
-
-        task.doLast {
-            getCqPackageHelper(project).validateRemoteBundles()
-        }
-
-        return task
-    }
-
-
-    Task install(Project project) {
-        Task installTask = project.task([
-            description: "Sequence of tasks to install CQ Package to localhost",
-            group      : 'CQ'
-        ], 'install')
-
-        installTask.dependsOn 'uninstall', 'remove', 'upload', 'installPackage'
-
-        return installTask
-    }
-
-
-    Task remove(Project project) {
-        Task removeTask = project.task([
-            description: "Removes the package from CQ. Does not fail if the package was not on " +
-                "the server to begin with.",
-            group      : 'CQ'
-        ], 'remove')
-
-        removeTask.doLast {
-            getCqPackageHelper(project).deletePackage(SimpleSlingPackageSupportFactory.INSTANCE)
-        }
-
-        removeTask.mustRunAfter 'uninstall'
-
-        return removeTask
-    }
-
-
-    Task uninstall(Project project) {
-        Task uninstallTask = project.task([
-            description: "Uninstalls the CQ Package. If the package is not on the server, nothing happens. " +
-                "(i.e., This does not fail if the package is not on the server.)",
-            group      : 'CQ',
-            dependsOn  : 'uninstallBundles'
-        ], 'uninstall')
-
-        uninstallTask.doLast {
-            getCqPackageHelper(project).uninstallPackage(SimpleSlingPackageSupportFactory.INSTANCE)
-        }
-
-        uninstallTask.mustRunAfter('createPackage')
-
-        return uninstallTask
-    }
-
-
-    static CqPackageHelper getCqPackageHelper(Project project) {
-        return (CqPackageHelper)extension(project, CqPackageHelper)
-    }
-
-
-    Task uninstallBundles(Project project) {
-        def task = project.task([
-            description: "Downloads the currently installed package .zip file if it exists, compiles list of " +
-                "bundles based off what is currently installed, then stops and uninstalls each bundles individually. " +
-                "A final refreshAllBundles is performed.",
-            group      : 'CQ'
-        ], 'uninstallBundles')
-
-        task.doLast {
-            getCqPackageHelper(project).uninstallBundles({ true })
-        }
-        return task
-    }
-
-
-    AddBundlesToFilterXmlTask addBundlesToFilterXml(Project project) {
-        def task = project.tasks.create('addBundlesToFilterXml', AddBundlesToFilterXmlTask)
-        task.description = "Adds the bundles to the filter.xml"
-        task.group = 'CQ'
-        return task
-    }
-
-
-    Task validateBundles(Project project) {
-        def task = project.tasks.create('validateBundles')
-        task.description = "Checks all the JARs that are included in the package to make sure they are " +
-            "installed and in an ACTIVE state and gives a report of any that are not. This task polls in the " +
-            "case the bundles are newly installed."
-        task.group = 'CQ'
-        task.doLast {
-            getCqPackageHelper(project).
-                validateBundles(cqPackageDependencies(project))
-        }
-        task.dependsOn cqPackageDependencies(project)
-    }
-
-
+    /**
+     * @see CreatePackageTask
+     */
     CreatePackageTask createPackage(Project project, AddBundlesToFilterXmlTask addBundlesToFilterXmlTask, Task verifyBundles) {
         def cp = project.tasks.create("createPackage", CreatePackageTask).with { cpTask ->
             project.tasks.withType(Jar) {
-                cpTask.mustRunAfter it
+                cpTask.mustRunAfter 'jar'
             }
 
             cpTask.dependsOn verifyBundles, addBundlesToFilterXmlTask
@@ -354,8 +272,13 @@ class CqPackagePlugin implements Plugin<Project> {
     }
 
 
-    public static Configuration cqPackageDependencies(Project project) {
+    static Configuration cqPackageDependencies(Project project) {
         return project.configurations.getByName(CQ_PACKAGE)
+    }
+
+
+    private static CqPackageHelper cqPackageHelper(Project project) {
+        return (CqPackageHelper)extension(project, CqPackageHelper)
     }
 
 }

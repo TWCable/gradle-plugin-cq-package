@@ -78,6 +78,7 @@ class CqPackageHelper {
     PackageManager packageManager = new PackageManagerImpl()
 
 
+    // TODO remove Project dependency
     CqPackageHelper(Project project) {
         if (project == null) throw new GradleException('project == null')
         this.project = project

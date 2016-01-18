@@ -17,14 +17,9 @@ package com.twcable.gradle.cqpackage
 
 import com.twcable.gradle.sling.SlingServersConfiguration
 import nebula.test.PluginProjectSpec
-import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.logging.LogLevel
-import org.gradle.testfixtures.ProjectBuilder
 import spock.lang.Unroll
-
-import static com.twcable.gradle.cqpackage.CqPackageTestUtils.addProjectToCompile
-import static com.twcable.gradle.cqpackage.CqPackageTestUtils.createSubProject
 
 class CqPackagePluginSpec extends PluginProjectSpec {
 
@@ -32,27 +27,23 @@ class CqPackagePluginSpec extends PluginProjectSpec {
         project.logging.level = LogLevel.DEBUG
         project.version = '2.3.4'
         project.apply plugin: 'com.twcable.cq-package'
-        project.apply plugin: 'java'
 
         project.tasks.withType(CreatePackageTask) { CreatePackageTask task ->
             task.bundleInstallRoot = '/apps/install'
         }
-
-        def subproject1 = createSubProject(project, 'subproject1', true)
-        addProjectToCompile(project, subproject1)
     }
 
 
     def "check added tasks"() {
         expect:
-        project.tasks.getByName('upload')
-        project.tasks.getByName('install')
-        project.tasks.getByName('uninstall')
-        project.tasks.getByName('remove')
+        project.tasks.getByName('uploadPackage')
+        project.tasks.getByName('installPackage')
+        project.tasks.getByName('uninstallPackage')
+        project.tasks.getByName('removePackage')
         project.tasks.getByName('createPackage')
 
         // the zip file (from "createPackage") should have been added to the list of artifacts
-//        project.getConfigurations().getByName("archives").artifacts.find { it.type == 'zip' }
+        project.getConfigurations().getByName("archives").artifacts.find { it.type == 'zip' }.name == project.name
     }
 
 
@@ -66,19 +57,15 @@ class CqPackagePluginSpec extends PluginProjectSpec {
         task.mustRunAfter.getDependencies(task) == afterTasks as Set
 
         where:
-        taskName         | mustRunAfterTaskNames
-        'uninstall'      | ['createPackage']
-        'remove'         | ['uninstall']
-        'uploadRemote'   | ['remove']
-        'installRemote'  | []
-        'upload'         | ['uninstall', 'createPackage']
-        'installPackage' | ['upload']
+        taskName           | mustRunAfterTaskNames
+        'uninstallPackage' | ['uninstallBundles']
+        'uploadPackage'    | ['createPackage', 'uninstallPackage']
+        'installPackage'   | ['uploadPackage', 'uninstallPackage']
     }
 
 
     def "check types"() {
         given:
-        Project project = ProjectBuilder.builder().build()
         project.apply plugin: 'com.twcable.cq-package'
 
         expect:
