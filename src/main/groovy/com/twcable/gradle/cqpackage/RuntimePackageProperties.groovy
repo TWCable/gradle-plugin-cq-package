@@ -16,8 +16,10 @@
 package com.twcable.gradle.cqpackage
 
 import groovy.json.JsonBuilder
+import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import org.apache.jackrabbit.vault.packaging.Dependency
+import org.apache.jackrabbit.vault.packaging.PackageId
 import org.apache.jackrabbit.vault.packaging.impl.PackagePropertiesImpl
 
 import javax.annotation.Nonnull
@@ -26,7 +28,11 @@ import static com.twcable.gradle.cqpackage.PackageStatus.NO_PACKAGE
 import static com.twcable.gradle.cqpackage.SuccessOrFailure.failure
 import static com.twcable.gradle.cqpackage.SuccessOrFailure.success
 
+/**
+ * Extends Jackrabbit's PackageProperties to provide support for more runtime properties.
+ */
 @Slf4j
+@CompileStatic
 class RuntimePackageProperties extends PackagePropertiesImpl {
     final Properties propertiesMap
 
@@ -110,7 +116,7 @@ class RuntimePackageProperties extends PackagePropertiesImpl {
     private static void resolvedDependencies(Collection<Map> v, Properties props) {
         final resDeps = v.
             findAll { Map dep -> dep.id != null && dep.id != '' }.
-            collect { Map dep -> dep.id }.
+            collect { Map dep -> dep.id as String }.
             collect { String depStr -> Dependency.fromString(depStr) } as Dependency[]
         final resDepsStr = Dependency.toString(resDeps)
         log.debug "Setting property ${RESOLVED_DEPENDENCIES}: ${resDepsStr}"
@@ -120,7 +126,7 @@ class RuntimePackageProperties extends PackagePropertiesImpl {
 
     private static void dependencies(Collection<Map> v, Properties props) {
         final deps = v.
-            collect { Map dep -> dep.name }.
+            collect { Map dep -> dep.name as String }.
             collect { String depStr -> Dependency.fromString(depStr) } as Dependency[]
         final depsStr = Dependency.toString(deps)
         log.debug "Setting property ${NAME_DEPENDENCIES}: ${depsStr}"
@@ -128,11 +134,14 @@ class RuntimePackageProperties extends PackagePropertiesImpl {
     }
 
     /**
-     * Asks the given server for its information for the package identified by "packageName".
+     * Asks the given server for its information for the package identified by "packageId". The version is ignored.
      */
     @Nonnull
     static SuccessOrFailure<RuntimePackageProperties> packageProperties(SlingPackageSupport slingPackageSupport,
-                                                                        String packageName) {
+                                                                        PackageId packageId) {
+        if (slingPackageSupport == null) throw new IllegalArgumentException("slingPackageSupport == null")
+        if (packageId == null) throw new IllegalArgumentException("packageId == null")
+
         if (!slingPackageSupport.active) return failure(Status.SERVER_INACTIVE)
 
         def sf = ListPackages.listPackages(slingPackageSupport)
@@ -141,9 +150,13 @@ class RuntimePackageProperties extends PackagePropertiesImpl {
         }
 
         def packagesProps = sf.value
-        def packageProp = packagesProps.find { it.name == packageName }
+        def packageProp = packagesProps.find { it.name == packageId.name }
+
+        // TODO: Add filtering by group
+        // requires https://github.com/TWCable/gradle-plugin-cq-package/issues/8
+        // def packageProp = packagesProps.find { it.name == packageId.name && it.id.group == packageId.group }
         if (packageProp == null) {
-            log.info "Could not find ${packageName} in ${packagesProps.collect { it.name }}"
+            log.info "Could not find ${packageId} in ${packagesProps.collect { it.id }}"
             return failure(NO_PACKAGE)
         }
         return success(packageProp)
