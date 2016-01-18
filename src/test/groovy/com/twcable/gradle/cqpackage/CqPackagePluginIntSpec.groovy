@@ -241,6 +241,21 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
     }
 
 
+    def "assemble"() {
+        writeHelloWorld('com.twcable.test', projectDir)
+        createVaultMetaInf(projectDir)
+
+        writeSimpleBuildFile()
+
+        when:
+        result = runTasks("assemble")
+
+        then:
+        result.success
+        result.wasExecuted(':createPackage')
+    }
+
+
     def "upload package with createPackage"() {
         defaultPackageListHandler()
         postHandler.addFileResponse("/crx/packmgr/service/.json", successfulPackageUpload().body)
