@@ -23,6 +23,8 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.Dependency
+import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.internal.artifacts.publish.ArchivePublishArtifact
 import org.gradle.api.internal.plugins.DefaultArtifactPublicationSet
 import org.gradle.api.plugins.BasePlugin
@@ -258,8 +260,10 @@ class CqPackagePlugin implements Plugin<Project> {
     CreatePackageTask createPackage(Project project, AddBundlesToFilterXmlTask addBundlesToFilterXmlTask, Task verifyBundles) {
         def cp = project.tasks.create("createPackage", CreatePackageTask).with { cpTask ->
             project.tasks.withType(Jar) {
-                cpTask.mustRunAfter 'jar'
+                cpTask.dependsOn it
             }
+
+            addProjectJarDependencies(project, cpTask)
 
             cpTask.dependsOn verifyBundles, addBundlesToFilterXmlTask
         } as CreatePackageTask
@@ -269,6 +273,22 @@ class CqPackagePlugin implements Plugin<Project> {
         pubSet.addCandidate(new ArchivePublishArtifact(cp))
 
         return cp
+    }
+
+    // TODO: https://github.com/TWCable/gradle-plugin-cq-package/issues/2
+    private void addProjectJarDependencies(Project project, CreatePackageTask cpTask) {
+        project.afterEvaluate {
+            def conf = project.configurations.getByName('cq_package')
+            def allDependencies = conf.allDependencies
+            def projDeps = allDependencies.findAll { dep -> dep instanceof ProjectDependency }
+            projDeps.each { Dependency dep ->
+                def projDep = dep as ProjectDependency
+                projDep.dependencyProject.tasks.withType(Jar) {
+                    log.debug "Adding dependency of ${cpTask} on ${it}"
+                    cpTask.dependsOn it
+                }
+            }
+        }
     }
 
 

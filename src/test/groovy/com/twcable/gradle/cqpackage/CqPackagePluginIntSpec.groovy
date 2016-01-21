@@ -132,8 +132,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         """.stripIndent()
 
         when:
-        // TODO: https://github.com/TWCable/gradle-plugin-cq-package/issues/2
-        result = runTasksSuccessfully('jar', 'createPackage')
+        result = runTasksSuccessfully('assemble')
 
         then:
         fileExists('build/classes/main/com/twcable/test/HelloWorld.class')
@@ -156,12 +155,12 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         createVaultMetaInf(modADir)
 
         when:
-        // TODO: https://github.com/TWCable/gradle-plugin-cq-package/issues/2
-        result = runTasksSuccessfully('jar', ':module-A:createPackage')
+        result = runTasksSuccessfully(':module-A:assemble')
 
         then:
         fileExists('module-A/build/classes/main/com/twcable/test/HelloWorld.class')
         result.wasExecuted(':module-A:jar')
+        result.wasExecuted(':module-A:createPackage')
         pathExistsInPackage("module-A", modADir, "META-INF/vault/filter.xml")
         pathExistsInPackage("module-A", modADir, "jcr_root/apps/install/module-A-${projVersion}.jar")
         result.success
@@ -189,8 +188,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         createVaultMetaInf(modBDir)
 
         when:
-        // TODO: https://github.com/TWCable/gradle-plugin-cq-package/issues/2
-        result = runTasksSuccessfully('jar', 'createPackage')
+        result = runTasksSuccessfully('createPackage')
 
         then:
         fileExists('module-A/build/classes/main/com/twcable/test/a/HelloWorld.class')
@@ -227,8 +225,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         createVaultMetaInf(modBDir)
 
         when:
-        // TODO: https://github.com/TWCable/gradle-plugin-cq-package/issues/2
-        result = runTasksSuccessfully('jar', 'createPackage')
+        result = runTasksSuccessfully(':module-B:createPackage')
 
         then:
         fileExists('module-A/build/classes/main/com/twcable/test/a/HelloWorld.class')
