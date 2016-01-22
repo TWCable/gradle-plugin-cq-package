@@ -12,6 +12,8 @@ toc::[]
 The standard Gradle "base" plugin is automatically applied and the .zip created by `createPackage` is added to
 the list of artifacts.
 
+There is link:../../../issues/12[a plan to provide example projects and build files]. In the mean time, the link:../src/test/groovy/com/twcable/gradle/cqpackage/[test cases show explicitly how everything is expected to be used], in particular link:../src/test/groovy/com/twcable/gradle/cqpackage/CqPackagePluginIntSpec.groovy[CqPackagePluginIntSpec creates stub projects and associated build files].
+
 == Tasks
 
 === Working Directly With Packages
