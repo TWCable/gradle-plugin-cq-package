@@ -217,6 +217,23 @@ class CqPackageHelperSpec extends ProjectSpec {
     }
 
 
+    def "validate all bundles for null symbolic names: resolved -> active"() {
+        given:
+        4 * slingSupport.doGet(bundleServerConf.bundlesControlUri) >>> [
+            bundlesResp(bundleConfiguration, RESOLVED),
+            bundlesResp(bundleConfiguration, RESOLVED),
+            bundlesResp(bundleConfiguration, RESOLVED),
+            bundlesResp(bundleConfiguration, ACTIVE)
+        ]
+
+        when:
+        def resp = cqPackageHelper.validateAllBundles(null, slingSupport)
+
+        then:
+        resp.code == HTTP_OK
+    }
+
+
     def "start inactive bundles"() {
         given:
         stubGet getBundleServerConf().bundlesControlUri, bundlesResp(bundleConfiguration, INSTALLED)
@@ -238,7 +255,20 @@ class CqPackageHelperSpec extends ProjectSpec {
 
         then:
         resp.code == HTTP_INTERNAL_ERROR
-        resp.body ==~ /Not all bundles .* are ACTIVE.*/
+        resp.body ==~ /Not all bundles for .* are ACTIVE.*/
+    }
+
+
+    def "validate all bundles for null symbolic names: resolved"() {
+        given:
+        stubGet bundleServerConf.bundlesControlUri, bundlesResp(bundleConfiguration, RESOLVED)
+
+        when:
+        def resp = cqPackageHelper.validateAllBundles(null, slingSupport)
+
+        then:
+        resp.code == HTTP_INTERNAL_ERROR
+        resp.body ==~ /Not all bundles are ACTIVE.*/
     }
 
 
@@ -251,7 +281,7 @@ class CqPackageHelperSpec extends ProjectSpec {
 
         then:
         resp.code == HTTP_INTERNAL_ERROR
-        resp.body ==~ /Not all bundles .* are ACTIVE.*/
+        resp.body ==~ /Not all bundles for .* are ACTIVE.*/
     }
 
 

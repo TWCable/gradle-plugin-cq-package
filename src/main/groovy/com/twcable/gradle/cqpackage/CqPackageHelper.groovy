@@ -77,7 +77,6 @@ class CqPackageHelper {
 
     PackageManager packageManager = new PackageManagerImpl()
 
-
     // TODO remove Project dependency
     CqPackageHelper(Project project) {
         if (project == null) throw new GradleException('project == null')
@@ -299,10 +298,9 @@ class CqPackageHelper {
      * it came across
      */
     @Nonnull
-    HttpResponse startInactiveBundles(@Nonnull SlingSupport slingSupport) {
+    static HttpResponse startInactiveBundles(@Nonnull SlingSupport slingSupport) {
         def serverConf = slingSupport.serverConf
         def resp = slingSupport.doGet(getBundlesControlUri(serverConf))
-        def bundleServerConfiguration = new BundleServerConfiguration(serverConf)
 
         if (resp.code == HTTP_OK) {
             Map json = new JsonSlurper().parseText(resp.body) as Map
@@ -312,19 +310,28 @@ class CqPackageHelper {
                 findAll { it.state == RESOLVED.stateString }.
                 collect { it.symbolicName } as List<String>
 
-            def httpResponse = new HttpResponse(HTTP_OK, '')
-            def inactiveBundlesIter = inactiveBundles.iterator()
-            while (inactiveBundlesIter.hasNext() && !isBadResponse(httpResponse.code, false)) {
-                String symbolicName = inactiveBundlesIter.next()
-                def bundleConfiguration = new SlingBundleConfiguration(symbolicName, "")
-                def slingBundleSupport = new SlingBundleSupport(bundleConfiguration, bundleServerConfiguration, slingSupport)
-                log.info "Trying to start inactive bundle: ${symbolicName}"
-                def startResp = slingBundleSupport.startBundle()
-                httpResponse = and(httpResponse, startResp, false)
-            }
+            HttpResponse httpResponse = startBundles(inactiveBundles, slingSupport)
             return httpResponse
         }
         return resp
+    }
+
+
+    private static HttpResponse startBundles(List<String> inactiveBundles, SlingSupport slingSupport) {
+        def serverConf = slingSupport.serverConf
+        def bundleServerConfiguration = new BundleServerConfiguration(serverConf)
+        def httpResponse = new HttpResponse(HTTP_OK, '')
+        def inactiveBundlesIter = inactiveBundles.iterator()
+
+        while (inactiveBundlesIter.hasNext() && !isBadResponse(httpResponse.code, false)) {
+            String symbolicName = inactiveBundlesIter.next()
+            def bundleConfiguration = new SlingBundleConfiguration(symbolicName, "")
+            def slingBundleSupport = new SlingBundleSupport(bundleConfiguration, bundleServerConfiguration, slingSupport)
+            log.info "Trying to start inactive bundle: ${symbolicName}"
+            def startResp = slingBundleSupport.startBundle()
+            httpResponse = and(httpResponse, startResp, false)
+        }
+        return httpResponse
     }
 
     /**
@@ -376,7 +383,8 @@ class CqPackageHelper {
      * Calls each server in {@link SlingServersConfiguration} and all the bundles in 'symbolicNames' to verify that
      * they are not in non-ACTIVE states. If there are, it returns HTTP_INTERNAL_ERROR (500).
      *
-     * @param configuration the Gradle Configuration such as "compile" to retrieve the list of bundles from
+     * @param symbolicNames the symbolic names to check; if null then all bundles on the server are checked
+     * @param slingSupport the server association to user
      *
      * @return HTTP_INTERNAL_ERROR if there are inactive bundles, otherwise the "aggregate" HTTP response: if all
      * the calls are in the >= 200 and <400 range, or a 408 (timeout, server not running) the returns an
@@ -384,7 +392,8 @@ class CqPackageHelper {
      */
     @Nonnull
     @SuppressWarnings("GroovyPointlessBoolean")
-    HttpResponse validateAllBundles(@Nonnull List<String> symbolicNames, @Nonnull SlingSupport slingSupport) {
+    static HttpResponse validateAllBundles(@Nullable Collection<String> symbolicNames,
+                                           @Nonnull SlingSupport slingSupport) {
         def serverConf = slingSupport.serverConf
         def serverName = serverConf.name
         log.info "Checking for NON-ACTIVE bundles on ${serverName}"
@@ -402,26 +411,7 @@ class CqPackageHelper {
 
                 def resp = slingSupport.doGet(getBundlesControlUri(serverConf))
                 if (resp.code == HTTP_OK) {
-                    try {
-                        def json = new JsonSlurper().parseText(resp.body) as Map
-                        List<Map<String, Object>> data = json.data as List
-
-                        def knownBundles = data.findAll { Map b -> symbolicNames.contains(b.symbolicName) }
-                        def knownBundleNames = knownBundles.collect { Map b -> (String)b.symbolicName }
-                        def missingBundleNames = (symbolicNames - knownBundleNames)
-                        def missingBundles = missingBundleNames.collect { String name ->
-                            [symbolicName: name, state: MISSING.stateString] as Map<String, Object>
-                        }
-                        def allBundles = knownBundles + missingBundles
-
-                        if (!hasAnInactiveBundle(allBundles)) {
-                            if (log.debugEnabled) allBundles.each { Map b -> log.debug "Active bundle: ${b.symbolicName}" }
-                            bundlesActive = true
-                        }
-                    }
-                    catch (Exception exp) {
-                        throw new GradleException("Problem parsing \"${resp.body}\"", exp)
-                    }
+                    bundlesActive = bundlesAreActive(symbolicNames, resp.body)
                 }
                 else {
                     if (resp.code == HTTP_CLIENT_TIMEOUT)
@@ -436,8 +426,12 @@ class CqPackageHelper {
 
         if (theResp.code != HTTP_OK) return theResp
 
-        if (bundlesActive == false)
-            return new HttpResponse(HTTP_INTERNAL_ERROR, "Not all bundles for ${symbolicNames} are ACTIVE on ${serverName}")
+        if (bundlesActive == false) {
+            if (symbolicNames == null)
+                return new HttpResponse(HTTP_INTERNAL_ERROR, "Not all bundles are ACTIVE on ${serverName}")
+            else
+                return new HttpResponse(HTTP_INTERNAL_ERROR, "Not all bundles for ${symbolicNames} are ACTIVE on ${serverName}")
+        }
         else {
             log.info("Bundles are ACTIVE on ${serverName}")
             return theResp
@@ -445,7 +439,38 @@ class CqPackageHelper {
     }
 
 
-    private boolean hasAnInactiveBundle(final Collection<Map<String, Object>> knownBundles) {
+    private static bundlesAreActive(@Nullable Collection<String> symbolicNames, String body) {
+        try {
+            def json = new JsonSlurper().parseText(body) as Map
+            List<Map<String, Object>> data = json.data as List
+
+            List<Map<String, Object>> allBundles
+            if (symbolicNames != null) {
+                def knownBundles = data.findAll { Map b -> symbolicNames.contains(b.symbolicName) }
+                def knownBundleNames = knownBundles.collect { Map b -> (String)b.symbolicName }
+                def missingBundleNames = (symbolicNames - knownBundleNames)
+                def missingBundles = missingBundleNames.collect { String name ->
+                    [symbolicName: name, state: MISSING.stateString] as Map<String, Object>
+                }
+                allBundles = knownBundles + missingBundles
+            }
+            else {
+                allBundles = data
+            }
+
+            if (!hasAnInactiveBundle(allBundles)) {
+                if (log.debugEnabled) allBundles.each { Map b -> log.debug "Active bundle: ${b.symbolicName}" }
+                return true
+            }
+            return false
+        }
+        catch (Exception exp) {
+            throw new GradleException("Problem parsing \"${body}\"", exp)
+        }
+    }
+
+
+    private static boolean hasAnInactiveBundle(final Collection<Map<String, Object>> knownBundles) {
         final activeBundles = knownBundles.findAll { bundle ->
             bundle.state == ACTIVE.stateString ||
                 bundle.state == FRAGMENT.stateString
