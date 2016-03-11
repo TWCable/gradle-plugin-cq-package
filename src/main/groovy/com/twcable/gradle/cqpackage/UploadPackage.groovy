@@ -27,6 +27,7 @@ import org.gradle.api.GradleException
 import org.gradle.api.Project
 
 import javax.annotation.Nonnull
+import javax.annotation.Nullable
 
 import static com.twcable.gradle.cqpackage.PackageStatus.NO_PACKAGE
 import static com.twcable.gradle.cqpackage.PackageStatus.UNKNOWN
@@ -160,6 +161,17 @@ in other words, there's no indication it's missing its dependency at this point
         return uploadStatus
     }
 
+
+    @Nullable
+    private static String projectOrSystemProperty(Project project, String propName) {
+        def hasProperty = project.hasProperty(propName)
+        if (hasProperty) {
+            return project.property(propName) as String
+        }
+
+        return System.getProperty(propName)
+    }
+
     /**
      * Returns the CQ Package file to use.
      *
@@ -168,15 +180,9 @@ in other words, there's no indication it's missing its dependency at this point
      */
     @Nonnull
     static File getThePackageFile(Project project) {
-        def hasPackageProperty = project.hasProperty('package')
-        if (hasPackageProperty) {
-            final filename = project.property('package') as String
-            final file = new File(filename).absoluteFile
-            if (!file.exists()) throw new FileNotFoundException(file.toString())
-            return file
-        }
+        def packageProperty = projectOrSystemProperty(project, 'package') ?:
+            projectOrSystemProperty(project, "${project.name}.package")
 
-        def packageProperty = System.getProperty('package')
         if (packageProperty != null) {
             final filename = packageProperty
             final file = new File(filename).absoluteFile
@@ -191,7 +197,7 @@ in other words, there's no indication it's missing its dependency at this point
         }
 
         // TODO Detect this situation at task-graph build time and automatically add the createPackage task
-        throw new IllegalStateException("The 'package' system property is not set and there is no output from the 'createPackage' task")
+        throw new IllegalStateException("The 'package' system/project property is not set, nor is \"${project.name}.package\", and there is no output from the \"createPackage\" task")
     }
 
 }

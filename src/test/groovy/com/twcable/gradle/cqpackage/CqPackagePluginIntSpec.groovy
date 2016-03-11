@@ -285,7 +285,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         !result.success
         def exp = result.failure.cause
         exp.task.name == 'uploadPackage'
-        exp.cause.message.contains("there is no output from the 'createPackage' task")
+        exp.cause.message.contains("there is no output from the \"createPackage\" task")
     }
 
 
@@ -334,6 +334,30 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
 
         when:
         result = runTasks("uploadPackage", "-Ppackage=${testPackageFilename}", "-x", "removePackage")
+
+        then:
+        result.success
+        !result.wasExecuted(':createPackage')
+    }
+
+
+    def "upload package with project-specific package Project property"() {
+        def testPackageFilename = this.class.classLoader.getResource("testpackage-1.0.1.zip").file
+
+        getHandler.addPathResponse("/crx/packmgr/list.jsp",
+            new JsonBuilder(
+                PackageServerFixture.packageList(
+                    PackageFixture.of("twc/test:testpackage:1.0.1")
+                )
+            ).toString()
+        )
+
+        postHandler.addFileResponse("/crx/packmgr/service/.json", successfulPackageUpload().body)
+
+        writeSimpleBuildFile()
+
+        when:
+        result = runTasks("uploadPackage", "-P${moduleName}.package=${testPackageFilename}", "-x", "removePackage")
 
         then:
         result.success
