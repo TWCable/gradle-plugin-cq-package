@@ -163,14 +163,25 @@ in other words, there's no indication it's missing its dependency at this point
     /**
      * Returns the CQ Package file to use.
      *
-     * If a System Property of "package" is set, that is used. Otherwise the output of
+     * If a System Property or Project property of "package" is set, that is used. Otherwise the output of
      * the 'createPackage' task is used.
      */
     @Nonnull
     static File getThePackageFile(Project project) {
+        def hasPackageProperty = project.hasProperty('package')
+        if (hasPackageProperty) {
+            final filename = project.property('package') as String
+            final file = new File(filename).absoluteFile
+            if (!file.exists()) throw new FileNotFoundException(file.toString())
+            return file
+        }
+
         def packageProperty = System.getProperty('package')
         if (packageProperty != null) {
-            return new File(packageProperty)
+            final filename = packageProperty
+            final file = new File(filename).absoluteFile
+            if (!file.exists()) throw new FileNotFoundException(file.toString())
+            return file
         }
 
         def file = CreatePackageTask.from(project).archivePath

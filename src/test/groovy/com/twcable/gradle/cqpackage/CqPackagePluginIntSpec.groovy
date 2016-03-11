@@ -317,6 +317,30 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
     }
 
 
+    def "upload package with package Project property"() {
+        def testPackageFilename = this.class.classLoader.getResource("testpackage-1.0.1.zip").file
+
+        getHandler.addPathResponse("/crx/packmgr/list.jsp",
+            new JsonBuilder(
+                PackageServerFixture.packageList(
+                    PackageFixture.of("twc/test:testpackage:1.0.1")
+                )
+            ).toString()
+        )
+
+        postHandler.addFileResponse("/crx/packmgr/service/.json", successfulPackageUpload().body)
+
+        writeSimpleBuildFile()
+
+        when:
+        result = runTasks("uploadPackage", "-Ppackage=${testPackageFilename}", "-x", "removePackage")
+
+        then:
+        result.success
+        !result.wasExecuted(':createPackage')
+    }
+
+
     def "install package"() {
         defaultPackageListHandler()
 
