@@ -1,6 +1,7 @@
 buildscript {
     repositories {
         maven {
+            jcenter()
             url "http://dl.bintray.com/jmoore/java-lib"
         }
     }
