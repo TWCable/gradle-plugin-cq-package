@@ -35,10 +35,7 @@ repositories {
 }
 
 dependencies {
-    compile "com.twcable.gradle:gradle-plugin-cq-bundle:2.1.0"
-
-    // can't use classifier because of a bug in Gradle's resolution only using group:artifact:version, not including classifier
-    // testCompile group: "com.twcable.gradle", name: "gradle-plugin-cq-bundle-tests", version: bundlePlugin_version, ext: 'jar'
+    compile "com.twcable.gradle:gradle-plugin-cq-bundle:2.2.0"
 
     // JCR file vault packaging
     compile "org.apache.jackrabbit.vault:org.apache.jackrabbit.vault:3.1.18"
@@ -69,6 +66,7 @@ dependencies {
 
 bintray {
     pkg {
+        userOrg = 'twcable'
         licenses = ['Apache-2.0']
         attributes = ['plat': ['gradle', 'aem', 'osgi', 'sling', 'cq']]
 
@@ -84,7 +82,7 @@ apply plugin: 'com.mooregreatsoftware.defaults'
 defaults {
     compatibilityVersion = '1.8'
 
-    id = 'twcable'
+    orgId = 'twcable'
 
     orgName = 'Time Warner Cable'
     orgUrl = 'http://www.timewarnercable.com'

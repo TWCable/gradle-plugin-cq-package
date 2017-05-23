@@ -43,15 +43,15 @@ buildscript {
 }
 ```
 
-Built against **Gradle 2.8**
+Built against **Gradle 3.5** and **JDK 1.8**
 
 # API #
 
-https://twcable.github.io/gradle-plugin-cq-package/docs/groovydoc/
+https://twcable.github.io/gradle-plugin-cq-package/groovydoc/
 
 # LICENSE
 
-Copyright 2015 Time Warner Cable, Inc.
+Copyright 2014-2017 Time Warner Cable, Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance
 with the License. You may obtain a copy of the License at
