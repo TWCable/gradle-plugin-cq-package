@@ -81,7 +81,7 @@ bintray {
 apply plugin: 'com.mooregreatsoftware.defaults'
 
 defaults {
-    compatibilityVersion = '1.7'
+    compatibilityVersion = '1.8'
 
     id = 'twcable'
 
@@ -95,7 +95,7 @@ defaults {
         [id: 'jmoore', name: 'Jim Moore', email: 'moore.jim@gmail.com'],
     ]
 
-    copyrightYears = '2014-2015'
+    copyrightYears = '2014-2017'
 }
 
 wrapper {
