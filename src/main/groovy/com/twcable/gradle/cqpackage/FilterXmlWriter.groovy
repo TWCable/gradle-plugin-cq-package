@@ -104,7 +104,7 @@ class FilterXmlWriter {
     private static Collection<String> jarPatterns(Collection<String> jarFiles, String bundleInstallRoot) {
         jarFiles.collect { String jarFileName ->
             "${bundleInstallRoot}/${jarFileName}"
-        }
+        } as Collection<String>
     }
 
 }

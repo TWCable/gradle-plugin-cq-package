@@ -68,7 +68,7 @@ class ListPackages {
             final JsonSlurper jsonSlurper = new JsonSlurper()
             return success(((Collection<Map>)(jsonSlurper.parseText(jsonStr) as Map).results).collect {
                 RuntimePackageProperties.fromJson(it)
-            })
+            }) as SuccessOrFailure<Collection<RuntimePackageProperties>>
         }
         else if (resp.code == HTTP_CLIENT_TIMEOUT) {
             return failure(Status.SERVER_TIMEOUT)

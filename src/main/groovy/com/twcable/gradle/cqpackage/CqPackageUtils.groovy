@@ -183,7 +183,7 @@ final class CqPackageUtils {
 
         DependencySet dependencies = configuration.allDependencies
 
-        def context = new CachingDependencyResolveContext(true)
+        def context = new CachingDependencyResolveContext(true, [:])
 
         def resolvableDependencies = dependencies.findAll {
             it instanceof ResolvableDependency

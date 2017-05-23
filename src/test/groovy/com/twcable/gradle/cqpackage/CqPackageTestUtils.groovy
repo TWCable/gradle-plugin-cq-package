@@ -23,6 +23,8 @@ import org.gradle.api.Project
 import org.gradle.api.internal.file.collections.SimpleFileCollection
 import org.gradle.api.logging.LogLevel
 import org.gradle.testfixtures.ProjectBuilder
+import org.slf4j.ILoggerFactory
+import org.slf4j.impl.StaticLoggerBinder
 
 import javax.annotation.Nonnull
 
@@ -36,7 +38,7 @@ final class CqPackageTestUtils {
 
     static Project createCqPackageProject(String version, String bundleRoot) {
         Project project = ProjectBuilder.builder().build()
-        project.logging.level = LogLevel.DEBUG
+        logLevel = LogLevel.DEBUG
         project.version = version
         project.apply plugin: 'com.twcable.cq-package'
         project.apply plugin: 'java'
@@ -101,6 +103,21 @@ final class CqPackageTestUtils {
     static void touch(@Nonnull File afile) {
         afile.parentFile.mkdirs() // make sure its directory exists
         afile.append(new byte[0])
+    }
+
+    /**
+     * Change the LogLevel used by the static instance of LoggerFactory.
+     * <p>
+     * Note that this affects a static factory, so changes will be reflected by anything that uses the same classloader.
+     */
+    static void setLogLevel(LogLevel logLevel) {
+        final loggerFactory = StaticLoggerBinder.getSingleton().getLoggerFactory()
+
+        final loggerFactoryClass = loggerFactory.getClass()
+        loggerFactoryClass.getMethod("setLevel", LogLevel.class).invoke(loggerFactory, logLevel)
+        final eventListener = loggerFactoryClass.getMethod("getOutputEventListener").invoke(loggerFactory)
+        if (eventListener == null) throw new IllegalStateException("eventListener == null for " + loggerFactory)
+        eventListener.getClass().getMethod("configure", LogLevel.class).invoke(eventListener, logLevel)
     }
 
 }

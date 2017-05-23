@@ -27,13 +27,14 @@ import static com.twcable.gradle.GradleUtils.execute
 import static com.twcable.gradle.cqpackage.CqPackageTestUtils.addProjectToCompile
 import static com.twcable.gradle.cqpackage.CqPackageTestUtils.contentDir
 import static com.twcable.gradle.cqpackage.CqPackageTestUtils.createSubProject
+import static com.twcable.gradle.cqpackage.CqPackageTestUtils.logLevel
 import static com.twcable.gradle.cqpackage.CqPackageTestUtils.touch
 
 @Subject(CreatePackageTask)
 class CreatePackageTaskSpec extends ProjectSpec {
 
     def setup() {
-        project.logging.level = LogLevel.DEBUG
+        logLevel = LogLevel.DEBUG
         project.version = "2.3.4"
         project.apply plugin: CqPackagePlugin
         project.apply plugin: 'java'

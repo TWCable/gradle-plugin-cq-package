@@ -21,10 +21,13 @@ import org.gradle.api.Task
 import org.gradle.api.logging.LogLevel
 import spock.lang.Unroll
 
+import static com.twcable.gradle.cqpackage.CqPackageTestUtils.logLevel
+
+
 class CqPackagePluginSpec extends PluginProjectSpec {
 
     def setup() {
-        project.logging.level = LogLevel.DEBUG
+        logLevel = LogLevel.DEBUG
         project.version = '2.3.4'
         project.apply plugin: 'com.twcable.cq-package'
 
