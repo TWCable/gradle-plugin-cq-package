@@ -87,7 +87,9 @@ final class CqPackageUtils {
     @Nonnull
     private static Collection<File> jarsForProjectDependencies(Collection<ProjectDependency> projectDependencies) {
         return projectDependencies.collectMany { ProjectDependency dep ->
-            jarsForArtifacts(dep.projectConfiguration)
+            final configurations = dep.dependencyProject.configurations
+            final conf = configurations.findByName(CqPackagePlugin.CQ_PACKAGE) ?: configurations.findByName("runtime")
+            jarsForArtifacts(conf)
         }
     }
 
@@ -98,7 +100,7 @@ final class CqPackageUtils {
         def allArtifacts = configuration.allArtifacts
         def fileCollection = allArtifacts.files
         def setOfFiles = fileCollection.files
-        setOfFiles.findAll { JAR_NAME_PATTERN.matcher(it.name).matches() }
+        return setOfFiles.findAll { JAR_NAME_PATTERN.matcher(it.name).matches() }
     }
 
 
@@ -136,7 +138,9 @@ final class CqPackageUtils {
     private static Collection<ProjectDependency> projectDependenciesForProjDep(ProjectDependency projectDependency) {
         if (projectDependency == null) return EMPTY_LIST
 
-        DependencySet dependencies = projectDependency.projectConfiguration.allDependencies
+        final configurations = projectDependency.dependencyProject.configurations
+        final conf = configurations.findByName(CqPackagePlugin.CQ_PACKAGE) ?: configurations.findByName("runtime")
+        final dependencies = conf.allDependencies
 
         def projDeps = dependencies.findAll { it instanceof ProjectDependency } as Collection<ProjectDependency>
 
