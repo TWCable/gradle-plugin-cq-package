@@ -17,12 +17,14 @@ package com.twcable.gradle.cqpackage
 
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
 
 import static com.twcable.gradle.GradleUtils.extension
 import static com.twcable.gradle.cqpackage.CqPackageHelper.isBadResponse
 
 class UninstallBundlesTask extends DefaultTask {
+    @Internal
     CqPackageHelper.UninstallBundlePredicate uninstallBundlesPredicate
 
 

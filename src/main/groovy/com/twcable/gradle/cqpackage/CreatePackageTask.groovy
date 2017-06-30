@@ -21,7 +21,10 @@ import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.file.CopySpec
 import org.gradle.api.internal.file.copy.DefaultCopySpec
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.bundling.Zip
 
 import javax.annotation.Nonnull
@@ -39,7 +42,9 @@ import static java.util.Collections.EMPTY_LIST
 @TypeChecked
 class CreatePackageTask extends Zip {
     private String _bundleInstallRoot = '/apps/install'
+    @Internal
     private File _contentSrc
+    @Internal
     private Configuration _configuration
 
     /**
@@ -47,8 +52,10 @@ class CreatePackageTask extends Zip {
      * Defaults with a "reasonable" set, such as "*&#42;/.vlt", "*&#42;/.git/**", etc.
      * Generally to modify this list you would mutate this in-place.
      */
+    @Input
     Collection<String> fileExclusions
 
+    @Input
     CopyBundlesMode copyBundlesMode = ALL
 
 
@@ -166,10 +173,22 @@ class CreatePackageTask extends Zip {
         ALL, PROJECT_ONLY, NON_PROJECT_ONLY, NONE
     }
 
+
+    @Input
+    String getConfigurationName() {
+        return getConfiguration().name
+    }
+
+
+    void setConfigurationName(String confName) {
+        configuration = project.configurations.getByName(confName)
+    }
+
     /**
      * The Configuration to use when determining what bundles to put in the package.
      * @see #addAllBundles()
      */
+    @Internal
     Configuration getConfiguration() {
         if (_configuration != null) return _configuration
 
@@ -215,6 +234,7 @@ class CreatePackageTask extends Zip {
     }
 
 
+    @InputFiles
     Collection<File> getBundleFiles() {
         switch (copyBundlesMode) {
             case ALL: return allBundleFiles(project, configuration)
@@ -240,6 +260,7 @@ class CreatePackageTask extends Zip {
      * Root location that jar bundles should be installed to.
      * Should include a prefixing / but not a trailing one.
      */
+    @Input
     String getBundleInstallRoot() {
         return _bundleInstallRoot
     }

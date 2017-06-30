@@ -17,6 +17,9 @@ package com.twcable.gradle.cqpackage
 
 import groovy.transform.CompileStatic
 import org.gradle.api.DefaultTask
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.TaskAction
 
 /**
@@ -29,11 +32,14 @@ class AddBundlesToFilterXmlTask extends DefaultTask {
     /**
      * Where to find the "source" XML that will be modified with the bundles.
      */
+    @Input
+    @Optional
     Reader filterXmlReader
 
     /**
      * Where the modified XML will be written.
      */
+    @Internal
     Writer filterXmlWriter
 
 
