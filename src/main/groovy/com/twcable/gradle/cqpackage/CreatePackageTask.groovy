@@ -22,7 +22,6 @@ import org.gradle.api.artifacts.Configuration
 import org.gradle.api.file.CopySpec
 import org.gradle.api.internal.file.copy.DefaultCopySpec
 import org.gradle.api.tasks.InputDirectory
-import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.bundling.Zip
 
 import javax.annotation.Nonnull
@@ -60,6 +59,12 @@ class CreatePackageTask extends Zip {
 
         setDefaults()
         addVaultFilter()
+
+        project.afterEvaluate {
+            addVaultDefinition(contentSrc)
+            addBundles(bundleInstallRoot)
+            addExclusions(fileExclusions)
+        }
     }
 
 
@@ -157,19 +162,6 @@ class CreatePackageTask extends Zip {
     }
 
 
-    @Override
-    @TaskAction
-    protected void copy() {
-        // delaying until now to set up these sections because they need the "final" versions
-        // of some of the properties of this task
-        addVaultDefinition(contentSrc)
-        addBundles(bundleInstallRoot)
-        addExclusions(fileExclusions)
-
-        super.copy()
-    }
-
-
     static enum CopyBundlesMode {
         ALL, PROJECT_ONLY, NON_PROJECT_ONLY, NONE
     }
@@ -190,14 +182,14 @@ class CreatePackageTask extends Zip {
     }
 
 
-    private addExclusions(Collection<String> fileExclusions) {
+    protected void addExclusions(Collection<String> fileExclusions) {
         fileExclusions.each {
             exclude it
         }
     }
 
 
-    private addVaultDefinition(@Nonnull File contentSrc) {
+    protected void addVaultDefinition(@Nonnull File contentSrc) {
         exclude 'META-INF/vault/definition/.content.xml'
         exclude 'META-INF/vault/properties.xml'
 
@@ -213,7 +205,7 @@ class CreatePackageTask extends Zip {
     }
 
 
-    private addVaultFilter() {
+    private void addVaultFilter() {
         this.mustRunAfter 'addBundlesToFilterXml'
 
         exclude 'META-INF/vault/filter.xml'
@@ -234,7 +226,7 @@ class CreatePackageTask extends Zip {
     }
 
 
-    private void addBundles(@Nonnull String bundleInstallRoot) {
+    protected void addBundles(@Nonnull String bundleInstallRoot) {
         if (copyBundlesMode == NONE) return // nothing to do
 
         this.into("jcr_root${bundleInstallRoot}") { CopySpec spec ->

@@ -132,7 +132,8 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         """.stripIndent()
 
         when:
-        result = runTasksSuccessfully('assemble')
+        gradleVersion = "3.5"
+        result = runTasksSuccessfully('clean', 'assemble')
 
         then:
         fileExists('build/classes/main/com/twcable/test/HelloWorld.class')
@@ -155,7 +156,8 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         createVaultMetaInf(modADir)
 
         when:
-        result = runTasksSuccessfully(':module-A:assemble')
+        gradleVersion = "3.5"
+        result = runTasksSuccessfully('clean', ':module-A:assemble')
 
         then:
         fileExists('module-A/build/classes/main/com/twcable/test/HelloWorld.class')
@@ -188,7 +190,8 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         createVaultMetaInf(modBDir)
 
         when:
-        result = runTasksSuccessfully('createPackage')
+        gradleVersion = "3.5"
+        result = runTasksSuccessfully('clean', 'createPackage')
 
         then:
         fileExists('module-A/build/classes/main/com/twcable/test/a/HelloWorld.class')
@@ -225,7 +228,8 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         createVaultMetaInf(modBDir)
 
         when:
-        result = runTasksSuccessfully(':module-B:createPackage')
+        gradleVersion = "3.5"
+        result = runTasksSuccessfully('clean', ':module-B:createPackage')
 
         then:
         fileExists('module-A/build/classes/main/com/twcable/test/a/HelloWorld.class')

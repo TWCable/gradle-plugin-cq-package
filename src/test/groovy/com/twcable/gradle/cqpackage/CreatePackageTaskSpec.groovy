@@ -15,6 +15,8 @@
  */
 package com.twcable.gradle.cqpackage
 
+import groovy.transform.CompileStatic
+import groovy.transform.TypeCheckingMode
 import nebula.test.ProjectSpec
 import org.gradle.api.logging.LogLevel
 import spock.lang.Subject
@@ -45,13 +47,13 @@ class CreatePackageTaskSpec extends ProjectSpec {
 
         project.verifyBundles.enabled = false
 
-        def subproject1 = createSubProject(project, 'subproject1', true)
+        final subproject1 = createSubProject(project, 'subproject1', true)
         addProjectToCompile(project, subproject1)
         def subprojJarFile = new File(subproject1.buildDir, "libs/subproject1.jar").canonicalFile
         touch(subprojJarFile)
         subproject1.jar.destinationDir = subprojJarFile.parentFile
         subproject1.jar.archiveName = subprojJarFile.name
-        new File(subproject1.buildDir, "classes/main").mkdirs()
+        writeHelloWorld("testing", subproject1.projectDir)
 
         def contentDir = contentDir(project)
 
@@ -169,9 +171,57 @@ class CreatePackageTaskSpec extends ProjectSpec {
         '/my/app/root/'    | '/my/app/root'
     }
 
+    // **********************************************************************
+    //
+    // HELPER METHODS
+    //
+    // **********************************************************************
 
     static List<String> filesInJar(CreatePackageTask createPackage) {
         return new JarFile(createPackage.archivePath).entries().iterator().collect { JarEntry entry -> entry.name }
+    }
+
+
+    protected File directory(String path, File baseDir = getProjectDir()) {
+        new File(baseDir, path).with {
+            mkdirs()
+            it
+        }
+    }
+
+
+    protected File file(String path, File baseDir) {
+        def splitted = path.split('/')
+        def directory = splitted.size() > 1 ? directory(splitted[0..-2].join('/'), baseDir) : baseDir
+        def file = new File(directory, splitted[-1])
+        file.createNewFile()
+        file
+    }
+
+
+    @CompileStatic(TypeCheckingMode.SKIP)
+    protected File createFile(String path, File baseDir) {
+        File file = file(path, baseDir)
+        if (!file.exists()) {
+            assert file.parentFile.mkdirs() || file.parentFile.exists()
+            file.createNewFile()
+        }
+        file
+    }
+
+
+    protected void writeHelloWorld(String packageDotted, File baseDir) {
+        def path = 'src/main/java/' + packageDotted.replace('.', '/') + '/HelloWorld.java'
+        def javaFile = createFile(path, baseDir)
+        javaFile << """\
+            package ${packageDotted};
+        
+            public class HelloWorld {
+                public static void main(String[] args) {
+                    System.out.println("Hello Integration Test");
+                }
+            }
+            """.stripIndent()
     }
 
 }
