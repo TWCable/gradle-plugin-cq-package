@@ -43,7 +43,7 @@ buildscript {
 }
 ```
 
-Built against **Gradle 3.5** and **JDK 1.8**
+Tested against **Gradle 3.5** and **Gradle 4.0** using **JDK 1.8**
 
 # API #
 
