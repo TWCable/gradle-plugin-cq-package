@@ -141,6 +141,17 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         pathExistsInPackage(moduleName, projectDir, "META-INF/vault/filter.xml")
         pathExistsInPackage(moduleName, projectDir, "jcr_root/apps/install/${moduleName}-${projVersion}.jar")
         result.success
+
+        when:
+        gradleVersion = "4.0"
+        result = runTasksSuccessfully('clean', 'assemble')
+
+        then:
+        fileExists('build/classes/java/main/com/twcable/test/HelloWorld.class')
+        result.wasExecuted(':jar')
+        pathExistsInPackage(moduleName, projectDir, "META-INF/vault/filter.xml")
+        pathExistsInPackage(moduleName, projectDir, "jcr_root/apps/install/${moduleName}-${projVersion}.jar")
+        result.success
     }
 
 
@@ -161,6 +172,18 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
 
         then:
         fileExists('module-A/build/classes/main/com/twcable/test/HelloWorld.class')
+        result.wasExecuted(':module-A:jar')
+        result.wasExecuted(':module-A:createPackage')
+        pathExistsInPackage("module-A", modADir, "META-INF/vault/filter.xml")
+        pathExistsInPackage("module-A", modADir, "jcr_root/apps/install/module-A-${projVersion}.jar")
+        result.success
+
+        when:
+        gradleVersion = "4.0"
+        result = runTasksSuccessfully('clean', ':module-A:assemble')
+
+        then:
+        fileExists('module-A/build/classes/java/main/com/twcable/test/HelloWorld.class')
         result.wasExecuted(':module-A:jar')
         result.wasExecuted(':module-A:createPackage')
         pathExistsInPackage("module-A", modADir, "META-INF/vault/filter.xml")
@@ -200,6 +223,18 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         pathExistsInPackage("module-B", modBDir, "META-INF/vault/filter.xml")
         pathExistsInPackage("module-B", modBDir, "jcr_root/apps/install/module-A.jar")
         result.success
+
+        when:
+        gradleVersion = "4.0"
+        result = runTasksSuccessfully('clean', 'createPackage')
+
+        then:
+        fileExists('module-A/build/classes/java/main/com/twcable/test/a/HelloWorld.class')
+        result.wasExecuted(':module-A:jar')
+        result.wasExecuted(':module-B:createPackage')
+        pathExistsInPackage("module-B", modBDir, "META-INF/vault/filter.xml")
+        pathExistsInPackage("module-B", modBDir, "jcr_root/apps/install/module-A.jar")
+        result.success
     }
 
 
@@ -233,6 +268,19 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
 
         then:
         fileExists('module-A/build/classes/main/com/twcable/test/a/HelloWorld.class')
+        result.wasExecuted(':module-A:jar')
+        result.wasExecuted(':module-B:jar')
+        result.wasExecuted(':module-B:createPackage')
+        pathExistsInPackage("module-B", modBDir, "META-INF/vault/filter.xml")
+        pathExistsInPackage("module-B", modBDir, "jcr_root/apps/install/module-A-${projVersion}.jar")
+        pathExistsInPackage("module-B", modBDir, "jcr_root/apps/install/module-B-${projVersion}.jar")
+
+        when:
+        gradleVersion = "4.0"
+        result = runTasksSuccessfully('clean', ':module-B:createPackage')
+
+        then:
+        fileExists('module-A/build/classes/java/main/com/twcable/test/a/HelloWorld.class')
         result.wasExecuted(':module-A:jar')
         result.wasExecuted(':module-B:jar')
         result.wasExecuted(':module-B:createPackage')
