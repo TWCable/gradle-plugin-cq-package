@@ -32,6 +32,7 @@ import org.eclipse.jetty.server.ServerConnector
 import org.eclipse.jetty.server.handler.AbstractHandler
 import org.eclipse.jetty.server.handler.HandlerCollection
 import org.eclipse.jetty.util.MultiPartInputStreamParser
+import org.gradle.api.GradleException
 import org.gradle.api.logging.LogLevel
 import org.spockframework.runtime.SpockAssertionError
 import spock.lang.AutoCleanup
@@ -238,7 +239,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
     }
 
 
-    def "create package from subpackages that both have code "() {
+    def "create package from subpackages that both have code"() {
         def modADir = addSubproject('module-A', """
             apply plugin: 'java'
             apply plugin: 'osgi'
@@ -287,6 +288,35 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         pathExistsInPackage("module-B", modBDir, "META-INF/vault/filter.xml")
         pathExistsInPackage("module-B", modBDir, "jcr_root/apps/install/module-A-${projVersion}.jar")
         pathExistsInPackage("module-B", modBDir, "jcr_root/apps/install/module-B-${projVersion}.jar")
+    }
+
+
+    def "create package from subpackages where one has code and one has content"() {
+        def modADir = addSubproject('module-A', """
+            ${applyPlugin(CqPackagePlugin)}
+            version = '${projVersion}'
+
+            dependencies {
+                cq_package project(":module-B")
+            }
+        """.stripIndent())
+
+        def modBDir = addSubproject('module-B', """
+            apply plugin: 'java'
+            apply plugin: 'osgi'
+            version = '${projVersion}'
+        """.stripIndent())
+
+        writeHelloWorld('com.twcable.test.b', modBDir)
+        createVaultMetaInf(modADir)
+
+        when:
+        runTasksWithFailure('clean', ':module-A:createPackage').rethrowFailure()
+
+        then:
+        final exp = thrown(GradleException)
+        final cause = rootCause(exp)
+        cause.message.contains('evaluationDependsOn ":module-B"')
     }
 
 
@@ -529,6 +559,13 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         catch (Exception exp) {
             throw new SpockAssertionError("Could not read ${file.canonicalPath}", exp)
         }
+    }
+
+
+    @TypeChecked
+    private static Throwable rootCause(Throwable throwable) {
+        final cause = throwable.cause
+        return (cause == null) ? throwable : rootCause(cause)
     }
 
 

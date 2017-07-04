@@ -18,6 +18,7 @@ package com.twcable.gradle.cqpackage
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
 import org.gradle.api.Project
+import org.gradle.api.ProjectConfigurationException
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.DependencySet
 import org.gradle.api.artifacts.ProjectDependency
@@ -138,13 +139,21 @@ final class CqPackageUtils {
     private static Collection<ProjectDependency> projectDependenciesForProjDep(ProjectDependency projectDependency) {
         if (projectDependency == null) return EMPTY_LIST
 
-        final configurations = projectDependency.dependencyProject.configurations
+        final depProj = projectDependency.dependencyProject
+        final configurations = depProj.configurations
+        log.info("Configurations for ${depProj} : ${configurations.collect({ it.name })}")
         final conf = configurations.findByName(CqPackagePlugin.CQ_PACKAGE) ?: configurations.findByName("runtime")
+        if (conf == null) {
+            if (configurations.isEmpty())
+                throw new ProjectConfigurationException("There are no Configurations for ${depProj}. You may need to use `evaluationDependsOn \"${depProj.path}\"` in your build script to force dependency ordering.", null)
+            else
+                throw new ProjectConfigurationException("${depProj} does not contain Configurations \"${CqPackagePlugin.CQ_PACKAGE}\" or \"runtime\".", null)
+        }
         final dependencies = conf.allDependencies
 
         def projDeps = dependencies.findAll { it instanceof ProjectDependency } as Collection<ProjectDependency>
 
-        log.debug "Project Dependencies for ${projectDependency.dependencyProject.name}:" +
+        log.debug "Project Dependencies for ${depProj.name}:" +
             " ${projDeps.collect { it.dependencyProject.path }.sort()}"
 
         return flattenProjectDependencies(projDeps)
