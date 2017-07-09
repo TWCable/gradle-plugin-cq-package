@@ -27,22 +27,28 @@ class UninstallBundlesTask extends DefaultTask {
     @Internal
     CqPackageHelper.UninstallBundlePredicate uninstallBundlesPredicate
 
+    private CqPackageHelper packageHelper
+
 
     UninstallBundlesTask() {
+        description = "Downloads the currently installed package .zip file if it exists, compiles list of " +
+            "bundles based off what is currently installed, then stops and uninstalls each bundle individually."
+
         this.uninstallBundlesPredicate = new CqPackageHelper.UninstallBundlePredicate() {
             @Override
             boolean eval(String symbolicName) {
                 return true
             }
         }
+
+        packageHelper = (CqPackageHelper)extension(project, CqPackageHelper)
     }
 
 
     @TaskAction
     @SuppressWarnings("GroovyUnusedDeclaration")
     void uninstallBundles() {
-        def packageHelper = (CqPackageHelper)extension(project, CqPackageHelper)
-        def resp = packageHelper.uninstallBundles(uninstallBundlesPredicate)
+        def resp = this.packageHelper.uninstallBundles(uninstallBundlesPredicate)
         if (isBadResponse(resp.code, true)) throw new GradleException("Could not uninstall bundles: ${resp}")
     }
 

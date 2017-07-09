@@ -17,7 +17,6 @@ package com.twcable.gradle.cqpackage;
 
 import com.twcable.gradle.sling.SlingServerConfiguration;
 
-import javax.annotation.Nonnull;
 import java.net.URI;
 import java.net.URISyntaxException;
 
@@ -38,7 +37,7 @@ public class PackageServerConfiguration {
     /**
      * Returns the URL to use to do actions on a CQ package.
      */
-    @Nonnull
+    @SuppressWarnings("argument.type.incompatible")
     public URI getPackageControlUri() throws URISyntaxException {
         URI base = serverConf.getBaseUri();
         return new URI(base.getScheme(), base.getUserInfo(), base.getHost(), base.getPort(), PACKAGE_MANAGER_BASE_PATH + "service/.json", null, null);
@@ -48,7 +47,7 @@ public class PackageServerConfiguration {
     /**
      * Returns the URL to list all the CQ packages.
      */
-    @Nonnull
+    @SuppressWarnings("argument.type.incompatible")
     public URI getPackageListUri() throws URISyntaxException {
         URI base = serverConf.getBaseUri();
         return new URI(base.getScheme(), base.getUserInfo(), base.getHost(), base.getPort(), PACKAGE_MANAGER_BASE_PATH + "list.jsp", null, null);
@@ -58,7 +57,7 @@ public class PackageServerConfiguration {
     /**
      * Returns the URL to download a CQ package.
      */
-    @Nonnull
+    @SuppressWarnings("argument.type.incompatible")
     public URI getPackageDownloadUri() throws URISyntaxException {
         URI base = serverConf.getBaseUri();
         return new URI(base.getScheme(), base.getUserInfo(), base.getHost(), base.getPort(), PACKAGE_MANAGER_BASE_PATH + "download.jsp", null, null);

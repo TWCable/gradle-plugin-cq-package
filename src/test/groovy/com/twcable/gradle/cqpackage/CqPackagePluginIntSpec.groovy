@@ -53,6 +53,7 @@ import static com.twcable.gradle.cqpackage.PackageServerFixture.successfulUninst
 @Subject(CqPackagePlugin)
 class CqPackagePluginIntSpec extends IntegrationSpec {
 
+    public static final String TEST_PACKAGE_FILENAME = "testpackage-1.0.1.zip"
     @AutoCleanup("stop")
     Server server
 
@@ -90,7 +91,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         createVaultMetaInf(projectDir)
 
         buildFile << """
-            ${applyPlugin(CqPackagePlugin.class)}
+            apply plugin: '${CqPackagePlugin.NAME}'
             version = '${projVersion}'
         """.stripIndent()
 
@@ -102,13 +103,12 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         result.success
     }
 
-    // TODO: https://github.com/TWCable/gradle-plugin-cq-package/issues/3
-    @Ignore("Currently broken: Zip file is written at project root")
+
     def "create package with no code and no content"() {
         createVaultMetaInf(projectDir)
 
         buildFile << """
-            ${applyPlugin(CqPackagePlugin.class)}
+            apply plugin: '${CqPackagePlugin.NAME}'
             version = '${projVersion}'
         """.stripIndent()
 
@@ -126,7 +126,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         createVaultMetaInf(projectDir)
 
         buildFile << """
-            ${applyPlugin(CqPackagePlugin.class)}
+            apply plugin: '${CqPackagePlugin.NAME}'
             apply plugin: 'java'
             apply plugin: 'osgi'
             version = '${projVersion}'
@@ -158,7 +158,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
 
     def "create package from subpackage with code and no content"() {
         def modADir = addSubproject('module-A', """
-            ${applyPlugin(CqPackagePlugin.class)}
+            apply plugin: '${CqPackagePlugin.NAME}'
             apply plugin: 'java'
             apply plugin: 'osgi'
             version = '${projVersion}'
@@ -192,8 +192,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         result.success
     }
 
-    // TODO: https://github.com/TWCable/gradle-plugin-cq-package/issues/3
-    @Ignore("Currently broken: Zip file is written at project root")
+
     def "create package from subpackage with no code and no content, and sibling with code"() {
         def modADir = addSubproject('module-A', """
             apply plugin: 'java'
@@ -203,7 +202,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         writeHelloWorld('com.twcable.test.a', modADir)
 
         def modBDir = addSubproject('module-B', """
-            ${applyPlugin(CqPackagePlugin.class)}
+            apply plugin: '${CqPackagePlugin.NAME}'
             version = '${projVersion}'
 
             dependencies {
@@ -249,7 +248,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
         writeHelloWorld('com.twcable.test.a', modADir)
 
         def modBDir = addSubproject('module-B', """
-            ${applyPlugin(CqPackagePlugin)}
+            apply plugin: '${CqPackagePlugin.NAME}'
 
             apply plugin: 'java'
             apply plugin: 'osgi'
@@ -293,7 +292,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
 
     def "create package from subpackages where one has code and one has content"() {
         def modADir = addSubproject('module-A', """
-            ${applyPlugin(CqPackagePlugin)}
+            apply plugin: '${CqPackagePlugin.NAME}'
             version = '${projVersion}'
 
             dependencies {
@@ -372,7 +371,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
 
 
     def "upload package with package property"() {
-        def testPackageFilename = this.class.classLoader.getResource("testpackage-1.0.1.zip").file
+        def testPackageFilename = this.class.classLoader.getResource(TEST_PACKAGE_FILENAME).file
         System.setProperty('package', testPackageFilename)
 
         getHandler.addPathResponse("/crx/packmgr/list.jsp",
@@ -418,7 +417,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
     def "remove package"() {
         defaultPackageListHandler()
 
-        def testPackageFilename = this.class.classLoader.getResource("testpackage-1.0.1.zip").file
+        def testPackageFilename = this.class.classLoader.getResource(TEST_PACKAGE_FILENAME).file
         getHandler.addFileResponse("/crx/packmgr/download.jsp", new File(testPackageFilename))
 
         postHandler.addFileResponse("/crx/packmgr/service/.json", successfulPackageUpload().body)
@@ -452,7 +451,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
     def "uninstall package"() {
         defaultPackageListHandler()
 
-        def testPackageFilename = this.class.classLoader.getResource("testpackage-1.0.1.zip").file
+        def testPackageFilename = this.class.classLoader.getResource(TEST_PACKAGE_FILENAME).file
         getHandler.addFileResponse("/crx/packmgr/download.jsp", new File(testPackageFilename))
 
         addPackageCommandResponse('uninstall', successfulUninstallPackage())
@@ -470,7 +469,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
     def "uninstall bundles"() {
         defaultPackageListHandler()
 
-        def testPackageFilename = this.class.classLoader.getResource("testpackage-1.0.1.zip").file
+        def testPackageFilename = this.class.classLoader.getResource(TEST_PACKAGE_FILENAME).file
         getHandler.addFileResponse("/crx/packmgr/download.jsp", new File(testPackageFilename))
 
         writeSimpleBuildFile()
@@ -536,7 +535,7 @@ class CqPackagePluginIntSpec extends IntegrationSpec {
     private File writeSimpleBuildFile() {
         return buildFile << """
             apply plugin: 'java'
-            ${applyPlugin(CqPackagePlugin)}
+            apply plugin: '${CqPackagePlugin.NAME}'
             version = '${projVersion}'
             slingServers.publisher.active = false
         """.stripIndent()

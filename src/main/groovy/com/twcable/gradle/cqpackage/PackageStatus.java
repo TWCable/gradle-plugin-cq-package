@@ -13,19 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.twcable.gradle.cqpackage
+package com.twcable.gradle.cqpackage;
 
-import groovy.transform.CompileStatic
-
-@CompileStatic
-class PackageStatus extends Status {
-
+public class PackageStatus extends Status {
     protected PackageStatus(String name) {
-        super(name)
+        super(name);
     }
 
-    static final PackageStatus NOT_INSTALLED = new PackageStatus("NOT_INSTALLED")
-    static final PackageStatus NO_PACKAGE = new PackageStatus("NO_PACKAGE")
-    static final PackageStatus PACKAGE_EXISTS = new PackageStatus("PACKAGE_EXISTS")
-    static final PackageStatus UNRESOLVED_DEPENDENCIES = new PackageStatus("UNRESOLVED_DEPENDENCIES")
+
+    public static final PackageStatus NOT_INSTALLED = new PackageStatus("NOT_INSTALLED");
+    public static final PackageStatus NO_PACKAGE = new PackageStatus("NO_PACKAGE");
+    public static final PackageStatus PACKAGE_EXISTS = new PackageStatus("PACKAGE_EXISTS");
+    public static final PackageStatus UNRESOLVED_DEPENDENCIES = new PackageStatus("UNRESOLVED_DEPENDENCIES");
 }

@@ -47,7 +47,7 @@ class RuntimePackageProperties extends PackagePropertiesImpl {
 
 
     Dependency[] getResolvedDependencies() {
-        def deps = getProperty(RESOLVED_DEPENDENCIES)
+        def deps = super.getProperty(RESOLVED_DEPENDENCIES)
         if (deps == null) {
             return Dependency.EMPTY
         }

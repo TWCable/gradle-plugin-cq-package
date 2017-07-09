@@ -36,8 +36,8 @@ class FilterDefinition {
     }
 
 
-    static FilterDefinition create(Collection<File> bundleFiles) {
-        return new FilterDefinition(bundleFiles.collect { it.name })
+    static FilterDefinition create(Iterable<File> bundleFiles) {
+        return new FilterDefinition(bundleFiles.collect { File file -> file.name })
     }
 
 

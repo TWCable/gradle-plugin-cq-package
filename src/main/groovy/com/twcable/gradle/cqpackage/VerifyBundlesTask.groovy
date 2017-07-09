@@ -17,6 +17,7 @@ package com.twcable.gradle.cqpackage
 
 import groovy.transform.CompileStatic
 import org.gradle.api.DefaultTask
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.TaskAction
 
 import static com.twcable.gradle.cqpackage.CqPackageHelper.isOsgiFile
@@ -24,10 +25,16 @@ import static com.twcable.gradle.cqpackage.CqPackageHelper.isOsgiFile
 @CompileStatic
 class VerifyBundlesTask extends DefaultTask {
 
-    Collection<File> nonOsgiFiles() {
-        def createProjectTask = CreatePackageTask.from(project)
-        def bundleFiles = createProjectTask.bundleFiles
-        return bundleFiles.findAll { !isOsgiFile(it) }
+    VerifyBundlesTask() {
+        description = "Checks all the JARs that are included in this package to make sure they are OSGi " +
+            "compliant, and gives a report of any that are not. Never causes the build to fail."
+    }
+
+
+    @Input
+    Collection<File> getBundleFiles() {
+        final createProjectTask = CreatePackageTask.from(project)
+        return createProjectTask.bundleFiles
     }
 
 
@@ -37,6 +44,12 @@ class VerifyBundlesTask extends DefaultTask {
         for (File file : nonOsgiFiles()) {
             logger.lifecycle "\n${file.name} is not an OSGi file"
         }
+    }
+
+
+    private Collection<File> nonOsgiFiles() {
+        final bundleFiles = getBundleFiles()
+        return bundleFiles.findAll { !isOsgiFile(it) }
     }
 
 }

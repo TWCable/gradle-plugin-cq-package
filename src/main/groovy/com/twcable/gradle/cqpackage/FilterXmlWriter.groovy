@@ -37,8 +37,8 @@ class FilterXmlWriter {
     private final String bundleInstallRoot
 
 
-    protected FilterXmlWriter(Reader inReader, FilterDefinition filterDefinition,
-                              String bundleInstallRoot, Writer outWriter) {
+    FilterXmlWriter(Reader inReader, FilterDefinition filterDefinition,
+                    String bundleInstallRoot, Writer outWriter) {
         this.inReader = inReader
         this.filterDefinition = filterDefinition
         this.outWriter = outWriter

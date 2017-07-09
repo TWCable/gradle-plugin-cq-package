@@ -13,28 +13,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.twcable.gradle.cqpackage
+package com.twcable.gradle.cqpackage;
 
-import groovy.transform.CompileStatic
+import groovy.transform.CompileStatic;
 
 @CompileStatic
-class Status {
-    final String name
+public class Status {
+
+    private final String name;
+    public static final Status OK = new Status("OK");
+    public static final Status UNKNOWN = new Status("UNKNOWN");
+    public static final Status SERVER_INACTIVE = new Status("SERVER_INACTIVE");
+    public static final Status SERVER_TIMEOUT = new Status("SERVER_TIMEOUT");
 
 
     protected Status(String name) {
-        this.name = name
+        this.name = name;
     }
-
-
-    static final Status OK = new Status("OK")
-    static final Status UNKNOWN = new Status("UNKNOWN")
-    static final Status SERVER_INACTIVE = new Status("SERVER_INACTIVE")
-    static final Status SERVER_TIMEOUT = new Status("SERVER_TIMEOUT")
 
 
     @Override
     public String toString() {
+        return name;
+    }
+
+
+    public final String getName() {
         return name;
     }
 

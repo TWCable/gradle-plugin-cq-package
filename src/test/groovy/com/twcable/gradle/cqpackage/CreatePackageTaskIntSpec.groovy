@@ -22,33 +22,33 @@ import org.gradle.api.logging.LogLevel
 import spock.lang.Subject
 import spock.lang.Unroll
 
-import java.util.zip.ZipFile
+import java.util.jar.JarEntry
+import java.util.jar.JarFile
 
 import static com.twcable.gradle.GradleUtils.execute
-import static com.twcable.gradle.cqpackage.CqPackageTestUtils.addProjectToConfiguration
+import static com.twcable.gradle.cqpackage.CqPackageTestUtils.addProjectToCompile
 import static com.twcable.gradle.cqpackage.CqPackageTestUtils.contentDir
 import static com.twcable.gradle.cqpackage.CqPackageTestUtils.createSubProject
 import static com.twcable.gradle.cqpackage.CqPackageTestUtils.logLevel
 import static com.twcable.gradle.cqpackage.CqPackageTestUtils.touch
 
 @Subject(CreatePackageTask)
-class CreatePackageTaskSpec extends ProjectSpec {
+class CreatePackageTaskIntSpec extends ProjectSpec {
 
     def setup() {
         logLevel = LogLevel.DEBUG
         project.version = "2.3.4"
+        project.apply plugin: CqPackagePlugin
+        project.apply plugin: 'java'
 
-        project.configurations.create("fooble")
-        def createPackage = project.tasks.create("createPackage", CreatePackageTask)
-        project.tasks.create("addBundlesToFilterXmlTask", AddBundlesToFilterXmlTask)
+        project.tasks.withType(CreatePackageTask) { CreatePackageTask task ->
+            task.bundleInstallRoot = "/apps/install"
+        }
 
-        createPackage.configurationName = "fooble"
-        createPackage.bundleInstallRoot = "/apps/install"
-        createPackage.baseName = project.name
-        createPackage.destinationDir = project.file("build/cq-packages")
+        project.verifyBundles.enabled = false
 
         final subproject1 = createSubProject(project, 'subproject1', true)
-        addProjectToConfiguration(project, "fooble", subproject1)
+        addProjectToCompile(project, subproject1)
         def subprojJarFile = new File(subproject1.buildDir, "libs/subproject1.jar").canonicalFile
         touch(subprojJarFile)
         subproject1.jar.destinationDir = subprojJarFile.parentFile
@@ -72,26 +72,11 @@ class CreatePackageTaskSpec extends ProjectSpec {
 
         when:
         execute(createPackage)
-        def filenames = filesInZip(createPackage)
+        def filenames = filesInJar(createPackage)
 
         then:
         filenames.contains("afile.txt")
-        filenames.contains("META-INF/vault/filter.xml")
         filenames.contains("jcr_root/apps/install/subproject1.jar")
-    }
-
-    // https://github.com/TWCable/gradle-plugin-cq-package/issues/26
-    def "create package without addBundlesToFilterXml still has filter.xml"() {
-        def createPackage = project.createPackage as CreatePackageTask
-
-        (project.addBundlesToFilterXmlTask as AddBundlesToFilterXmlTask).enabled = false
-
-        when:
-        execute(createPackage)
-        def filenames = filesInZip(createPackage)
-
-        then:
-        filenames.contains("META-INF/vault/filter.xml")
     }
 
 
@@ -100,11 +85,10 @@ class CreatePackageTaskSpec extends ProjectSpec {
 
         when:
         execute(createPackage)
-        def filenames = filesInZip(createPackage)
+        def filenames = filesInJar(createPackage)
 
         then:
         filenames.contains("afile.txt")
-        filenames.contains("META-INF/vault/filter.xml")
         filenames.contains("jcr_root/apps/install/subproject1.jar")
     }
 
@@ -115,11 +99,10 @@ class CreatePackageTaskSpec extends ProjectSpec {
 
         when:
         execute(createPackage)
-        def filenames = filesInZip(createPackage)
+        def filenames = filesInJar(createPackage)
 
         then:
         filenames.contains("afile.txt")
-        filenames.contains("META-INF/vault/filter.xml")
         filenames.contains("jcr_root/apps/install/subproject1.jar")
     }
 
@@ -130,11 +113,10 @@ class CreatePackageTaskSpec extends ProjectSpec {
 
         when:
         execute(createPackage)
-        def filenames = filesInZip(createPackage)
+        def filenames = filesInJar(createPackage)
 
         then:
         filenames.contains("afile.txt")
-        filenames.contains("META-INF/vault/filter.xml")
         !filenames.contains("jcr_root/apps/install/subproject1.jar")
     }
 
@@ -145,7 +127,7 @@ class CreatePackageTaskSpec extends ProjectSpec {
 
         when:
         execute(createPackage)
-        def filenames = filesInZip(createPackage)
+        def filenames = filesInJar(createPackage)
 
         then:
         filenames.contains("afile.txt")
@@ -162,11 +144,10 @@ class CreatePackageTaskSpec extends ProjectSpec {
 
         when:
         execute(createPackage)
-        def filenames = filesInZip(createPackage)
+        def filenames = filesInJar(createPackage)
 
         then:
         !filenames.contains(".gitignore")
-        filenames.contains("META-INF/vault/filter.xml")
         !filenames.contains("jcr_root/.vlt-sync-config.properties")
     }
 
@@ -196,11 +177,8 @@ class CreatePackageTaskSpec extends ProjectSpec {
     //
     // **********************************************************************
 
-    static List<String> filesInZip(CreatePackageTask createPackage) {
-        def createPackageFile = createPackage.archivePath
-        def zipFile = new ZipFile(createPackageFile)
-        def iterator = zipFile.entries().iterator()
-        return iterator.collect { entry -> entry.name }
+    static List<String> filesInJar(CreatePackageTask createPackage) {
+        return new JarFile(createPackage.archivePath).entries().iterator().collect { JarEntry entry -> entry.name }
     }
 
 

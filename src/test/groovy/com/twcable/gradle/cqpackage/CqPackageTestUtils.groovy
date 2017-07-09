@@ -23,7 +23,6 @@ import org.gradle.api.Project
 import org.gradle.api.internal.file.collections.SimpleFileCollection
 import org.gradle.api.logging.LogLevel
 import org.gradle.testfixtures.ProjectBuilder
-import org.slf4j.ILoggerFactory
 import org.slf4j.impl.StaticLoggerBinder
 
 import javax.annotation.Nonnull
@@ -74,9 +73,14 @@ final class CqPackageTestUtils {
     }
 
 
-    static def addProjectToCompile(Project project, Project projectDep) {
+    static void addProjectToCompile(Project project, Project projectDep) {
+        addProjectToConfiguration(project, "compile", projectDep)
+    }
+
+
+    static void addProjectToConfiguration(Project project, String configName, Project projectDep) {
         def dependencyHandler = project.dependencies
-        def compile = project.configurations.getByName("compile")
+        def compile = project.configurations.getByName(configName)
         compile.dependencies.add(dependencyHandler.project([path: projectDep.path]))
     }
 
