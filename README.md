@@ -4,24 +4,6 @@ Gradle plugin for working with Adobe CQ/AEM content packages.
 
 [ ![Download](https://api.bintray.com/packages/twcable/aem/gradle-plugin-cq-package/images/download.svg) ](https://bintray.com/twcable/aem/gradle-plugin-cq-package/_latestVersion)  [![Stories in Ready](https://badge.waffle.io/TWCable/gradle-plugin-cq-package.png?label=ready&title=Ready)](https://waffle.io/TWCable/gradle-plugin-cq-package)
 
-# Installation #
-
-```
-buildscript {
-    repositories {
-        jcenter()
-        maven {
-            url "http://dl.bintray.com/twcable/aem"
-        }
-    }
-
-    dependencies {
-        classpath "com.twcable.gradle:gradle-plugin-cq-package:<version>"
-    }
-}
-```
-
-
 # CQ Package Plugin #
 
 See [the CQ Package Plugin documentation](docs/CqPackagePlugin.adoc)
@@ -29,17 +11,8 @@ See [the CQ Package Plugin documentation](docs/CqPackagePlugin.adoc)
 # Installation #
 
 ```
-buildscript {
-    repositories {
-        jcenter()
-        maven {
-            url "http://dl.bintray.com/twcable/aem"
-        }
-    }
-
-    dependencies {
-        classpath "com.twcable.gradle:gradle-plugin-cq-package:<version>"
-    }
+plugins {
+  id "com.twcable.cq-package" version "2.4.1"
 }
 ```
 
