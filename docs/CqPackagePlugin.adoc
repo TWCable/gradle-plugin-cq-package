@@ -117,11 +117,14 @@ This uses https://github.com/TWCable/gradle-plugin-cq-bundle/blob/master/docs/Cq
 
 It can be useful to use an existing file rather than the output of `createPackage`.
 (e.g., In a deployment pipeline where the artifact is pulled from a repository.)
-Setting the `package` system property (i.e., `-Dpackage=XX`) will force the
+Setting the `package` system or project property (i.e., `-Dpackage=XX` or `-Ppackage=XX`) will force the
 use of the specified file.
 
+If more control is needed, you can prepend the package key with the name of the project (with no leading colon).
+For example, `-Psub-module-a.package=XX` will set the package property for just `:sub-module-a`.
+
 This will fail if it doesn't have a file to upload, either because `createPackage` has not been run or the `package`
-system property has not been set.
+property has not been set.
 
 
 == Task `uninstallBundles`
