@@ -12,6 +12,7 @@ buildscript {
 
 plugins {
     id 'com.jfrog.bintray' version '1.4'
+    id 'com.gradle.plugin-publish' version '0.9.7'
 }
 
 group = 'com.twcable.gradle'
@@ -23,19 +24,32 @@ apply plugin: 'java-gradle-plugin'
 
 repositories {
     maven {
-        url "http://dl.bintray.com/twcable/aem"
+        url "https://plugins.gradle.org/m2/"
     }
 
     // needed for the xmlunit SNAPSHOTS
     maven {
         url "https://oss.sonatype.org/content/repositories/snapshots"
     }
+}
 
-    mavenLocal()
+pluginBundle {
+    website = 'https://github.com/TWCable/gradle-plugin-cq-package'
+    vcsUrl = 'https://github.com/TWCable/gradle-plugin-cq-package.git'
+
+    //noinspection GroovyAssignabilityCheck
+    plugins {
+        cqPackage {
+            id = 'com.twcable.cq-package'
+            displayName = 'Content packages in Adobe CQ/AEM'
+            description = 'A plugin that helps you work with content packages in Adobe CQ/AEM'
+            tags = ['aem', 'osgi', 'sling', 'cq']
+        }
+    }
 }
 
 dependencies {
-    compile "com.twcable.gradle:gradle-plugin-cq-bundle:2.2.1"
+    compile "gradle.plugin.com.twcable.gradle:gradle-plugin-cq-bundle:2.2.2"
 
     // JCR file vault packaging
     compile "org.apache.jackrabbit.vault:org.apache.jackrabbit.vault:3.1.18"
@@ -96,6 +110,8 @@ defaults {
 
     copyrightYears = '2014-2017'
 }
+
+tasks.release.dependsOn publishPlugins
 
 wrapper {
     gradleVersion = "4.0"
